@@ -1,0 +1,38 @@
+name: CI Workflow and Project Management
+
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches:
+      - main
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write  # Ensures the workflow has permissions to modify issues
+
+jobs:
+  test:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        pip install -U pip
+        pip install .
+        pip install pytest
+        pip install pre-commit
+    - name: Run tests with pytest
+      run: |
+        source .venv/bin/activate
+        pytest
