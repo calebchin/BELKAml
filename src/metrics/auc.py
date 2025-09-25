@@ -1,8 +1,19 @@
 import torch
+import torch.nn as nn
 from torchmetrics.classification import MultilabelAUROC, MulticlassAUROC, BinaryAUROC
 
+
 class MaskedAUC(nn.Module):
-    def __init__(self, mode: str, mask: int, multi_label: bool, num_labels: int = None, vocab_size: int = None):
+    """Compute AUC for masked/multi-label predictions."""
+
+    def __init__(
+        self,
+        mode: str,
+        mask: int,
+        multi_label: bool,
+        num_labels: int = None or 1,
+        vocab_size: int = None or 1,
+    ):
         super().__init__()
         self.mode = mode
         self.mask = mask
@@ -17,18 +28,19 @@ class MaskedAUC(nn.Module):
         else:
             self.metric = BinaryAUROC()
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
+        """Computer masked or multi-label AUC."""
         if self.mode == "mlm":
-            unmasked = y_true[:, :, 1]
+            # unmasked = y_true[:, :, 1]
             y_true = y_true[:, :, 0]
             y_true = y_true.reshape(-1)
             y_pred = y_pred.reshape(-1, self.vocab_size)
-            mask = (y_true != self.mask)
+            mask = y_true != self.mask
             y_true = y_true[mask]
             y_pred = y_pred[mask]
 
         elif self.mode == "clf":
-            mask = (y_true != self.mask)
+            mask = y_true != self.mask
             y_pred = y_pred[mask]
             y_true = y_true[mask]
 

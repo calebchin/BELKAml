@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as f
+
 
 class CategoricalLoss(nn.Module):
-    """
-    Masked Categorical Focal loss.
+    """Masked Categorical Focal loss.
     Dynamic mini-batch class weights ("alpha").
     Used for MLM training.
     """
+
     def __init__(self, epsilon: float, mask: int, vocab_size: int, gamma: float = 2.0):
         super().__init__()
         self.epsilon = epsilon
@@ -15,7 +16,8 @@ class CategoricalLoss(nn.Module):
         self.mask = mask
         self.vocab_size = vocab_size
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
+        """Compute loss"""
         # Unpack y_true into masked and unmasked arrays
         unmasked = y_true[:, :, 1]
         y_true = y_true[:, :, 0]
@@ -25,7 +27,7 @@ class CategoricalLoss(nn.Module):
         y_pred = y_pred.reshape(-1, self.vocab_size)
 
         # Drop non-masked
-        mask = (y_true != self.mask)
+        mask = y_true != self.mask
         y_true = y_true[mask]
 
         # Compute class weights (alpha)
@@ -34,7 +36,7 @@ class CategoricalLoss(nn.Module):
         alpha = torch.where(freq == 0.0, torch.zeros_like(freq), torch.rsqrt(freq))
 
         # One-hot encode targets
-        y_true_oh = F.one_hot(y_true, num_classes=self.vocab_size).float()
+        y_true_oh = f.one_hot(y_true, num_classes=self.vocab_size).float()
         y_pred = y_pred[mask]
 
         # Clip predictions
