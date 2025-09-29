@@ -1,6 +1,5 @@
 # BELKAml
 
-<<<<<<< HEAD
 End-to-end application for predicting binding affinity of small molecules to protein targets with deep learning.
 
 ## Installation instructions
@@ -61,6 +60,3 @@ We welcome contributions to this package! If you have any ideas for new features
 
 ## License
 This package is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
-=======
-Test
->>>>>>> 4fec372 (Test push)

@@ -36,7 +36,7 @@ dependencies = [
     "rdkit",
     "scikit-fingerprints",
     "atomInSmiles",
-    "pyarrow"
+    "pyarrow",
     "torchmetrics",
     "dask"
 ]
