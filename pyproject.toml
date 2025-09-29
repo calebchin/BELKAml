@@ -37,6 +37,8 @@ dependencies = [
     "scikit-fingerprints",
     "atomInSmiles",
     "pyarrow"
+    "torchmetrics",
+    "dask"
 ]
 
 [project.optional-dependencies]
