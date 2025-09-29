@@ -31,7 +31,12 @@ dependencies = [
     "numpy",
     "pandas",
     "torch",
-    "dask"
+    "dask",
+    "scikit-learn",
+    "rdkit",
+    "scikit-fingerprints",
+    "atomInSmiles",
+    "pyarrow"
 ]
 
 [project.optional-dependencies]
