@@ -31,6 +31,12 @@ dependencies = [
     "numpy",
     "pandas",
     "torch",
+    "dask",
+    "scikit-learn",
+    "rdkit",
+    "scikit-fingerprints",
+    "atomInSmiles",
+    "pyarrow",
     "torchmetrics",
     "dask"
 ]
