@@ -6,6 +6,10 @@ import torch.nn.functional as F
 from skfp.fingerprints import ECFPFingerprint
 
 
+# Usage is mostly the same as the keras version, except now you must pass key_padding_mask from
+# Embeddings.forward() to EncoderLayer.forward().
+
+
 class FPGenerator(nn.Module):
     def __init__(self):
         super().__init__()
@@ -20,7 +24,7 @@ class FPGenerator(nn.Module):
             inputs = inputs.detach().cpu().numpy().astype(str)
 
         x = self.transformer.transform(inputs)
-        x = torch.tensor(x, dtype=torch.int8)
+        x = torch.tensor(x, dtype=torch.long)
         return x
 
 
@@ -63,9 +67,11 @@ class Embeddings(nn.Module):
         self.encodings = Encodings(depth=depth, max_length=max_length)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        key_padding_mask = inputs == 0
+
         x = self.embeddings(inputs)
         x = self.encodings(x)
-        return x
+        return x, key_padding_mask
 
 
 class FeedForward(nn.Module):
@@ -117,20 +123,15 @@ class SelfAttention(nn.Module):
     def forward(
         self,
         inputs: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
         key_padding_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         # inputs: [B, L, D]
         x = self.norm(inputs)
 
-        # Build causal mask if needed
+        attn_mask = None
         if self.causal:
             L = inputs.size(1)
-            causal_mask = torch.triu(torch.ones(L, L), diagonal=1).bool()
-            if attn_mask is not None:
-                attn_mask = attn_mask.logical_or(causal_mask)
-            else:
-                attn_mask = causal_mask
+            attn_mask = torch.triu(torch.ones(L, L, device=inputs.device), diagonal=1).bool()
 
         out, _ = self.mha(
             x, x, x, attn_mask=attn_mask, key_padding_mask=key_padding_mask
@@ -165,11 +166,8 @@ class EncoderLayer(nn.Module):
     def forward(
         self,
         inputs: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
         key_padding_mask: Optional[torch.Tensor] = None,
     ):
-        x = self.self_attention(
-            inputs, attn_mask=attn_mask, key_padding_mask=key_padding_mask
-        )
+        x = self.self_attention(inputs, key_padding_mask=key_padding_mask)
         x = self.ffn(x)
         return x
