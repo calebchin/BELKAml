@@ -1,10 +1,146 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "belkaml"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "scikit-fingerprints>=1.17.0",
-    "torch>=2.8.0",
+requires-python = ">=3.10"
+description = "End-to-end application for predicting binding affinity of small molecules to protein targets with deep learning."
+version = "1.0.0"
+authors = [
+    {name="Caleb Chin", email="cchin@cs.toronto.edu"},
+    {name="Junyoung Seok", email="junyoung.seok@mail.utoronto.ca"},
+    {name="Karththigan Pushparaj", email="karththigan.pushparaj@mail.utoronto.ca"},
+    {name="Kevin Deng", email="haoze.deng@mail.utoronto.ca"}
 ]
+readme = "README.md"
+license = "MIT"
+keywords = ["machine learning", "drug discovery", "deep learning"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "numpy",
+    "pandas",
+    "torch",
+    "dask",
+    "scikit-fingerprints"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit",
+    "ruff",
+    "pytest",
+]
+
+[project.urls]
+Homepage = "https://github.com/calebchin/BELKAml"
+Documentation = "https://github.com/calebchin/BELKAml"
+Repository = "https://github.com/calebchin/BELKAml"
+Issues = "https://github.com/calebchin/BELKAml/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.ruff]
+
+exclude = [
+    ".git",
+    "__pycache__",
+    "unconsolidated_code/*",
+    "docs/*",
+]
+
+lint.ignore = [
+    "ANN101",
+    "ANN401",
+    "N801",
+    "E203",
+    "E266",
+    "E501",
+    "E741",
+    "N803",
+    "N802",
+    "N806",
+    "D400",
+    "D401",
+    "D104", #temporary
+    "D105",
+    "D415",
+    "D402",
+    "D205",
+    "D100",
+    "D101",
+    "D107",
+    "D203",
+    "D213",
+    "ANN204",
+    "ANN102",
+]
+lint.select = ["D", "E", "F", "N", "ANN"]
+lint.fixable = [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "I",
+    "N",
+    "Q",
+    "S",
+    "T",
+    "W",
+    "ANN",
+    "ARG",
+    "BLE",
+    "COM",
+    "DJ",
+    "DTZ",
+    "EM",
+    "ERA",
+    "EXE",
+    "FBT",
+    "ICN",
+    "INP",
+    "ISC",
+    "NPY",
+    "PD",
+    "PGH",
+    "PIE",
+    "PL",
+    "PT",
+    "PTH",
+    "PYI",
+    "RET",
+    "RSE",
+    "RUF",
+    "SIM",
+    "SLF",
+    "TCH",
+    "TID",
+    "TRY",
+    "UP",
+    "YTT",
+]
+lint.unfixable = []
+
+[tool.pyright]
+venv = ".venv"
+venvPath = "."
+include = ["src"]
+pythonVersion = "3.10"
+
