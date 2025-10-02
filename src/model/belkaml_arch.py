@@ -29,12 +29,18 @@ class Belka(nn.Module):
         # Note: Assuming Embeddings and EncoderLayer are implemented elsewhere
         # These would typically be transformer-style embeddings and encoder layers
         self.embeddings = Embeddings(
-            input_dim=vocab_size, name="smiles_emb"
-        )  # TODO: Implement Embeddings
+            max_length=128, depth=32, input_dim=vocab_size
+        )  # TODO: don't hard-code, replace once **parameters are implemented
 
         self.encoder_layers = nn.ModuleList(
             [
-                EncoderLayer(name=f"encoder_{i}")  # TODO: Implement EncoderLayer
+                EncoderLayer(
+                    activation=f.gelu,
+                    depth=32,
+                    dropout_rate=0.1,
+                    epsilon=1e-07,
+                    num_heads=8,
+                )  # TODO: don't hard-code, replace once **parameters are implemented
                 for i in range(num_layers)
             ]
         )
@@ -56,10 +62,10 @@ class Belka(nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """Forward pass of main Belka arch"""
-        x = self.embeddings(inputs)
+        x, key_padding_mask = self.embeddings(inputs)
 
         for encoder in self.encoder_layers:
-            x = encoder(x)
+            x = encoder(x, key_padding_mask)
 
         if self.mode == "mlm":
             x = self.head(x)
