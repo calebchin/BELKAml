@@ -32,7 +32,13 @@ dependencies = [
     "pandas",
     "torch",
     "dask",
-    "scikit-fingerprints"
+    "scikit-learn",
+    "rdkit",
+    "scikit-fingerprints",
+    "atomInSmiles",
+    "pyarrow",
+    "torchmetrics",
+    "dask"
 ]
 
 [project.optional-dependencies]
@@ -143,4 +149,3 @@ venv = ".venv"
 venvPath = "."
 include = ["src"]
 pythonVersion = "3.10"
-
