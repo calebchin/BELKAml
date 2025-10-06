@@ -67,8 +67,9 @@ def test_categorical_loss_basic() -> None:
     assert loss_perfect.item() < loss_wrong.item()
 
 
-# Removed ("other", False) case for now...
-@pytest.mark.parametrize("mode, multi_label", [("mlm", False), ("clf", True)])
+@pytest.mark.parametrize(
+    "mode, multi_label", [("mlm", False), ("clf", True), ("other", False)]
+)
 def test_masked_auc_basic(mode: str, multi_label: bool) -> None:
     """Test MaskedAUC"""
     metric_fn: MaskedAUC
@@ -91,7 +92,7 @@ def test_masked_auc_basic(mode: str, multi_label: bool) -> None:
         )
     else:  # regular binary classification ("other" mode)
         y_true = torch.tensor([0, 1, 1, 0], dtype=torch.long)
-        y_pred = torch.rand_like(y_true)
+        y_pred = torch.rand_like(y_true, dtype=torch.float)
         metric_fn = MaskedAUC(mode=mode, mask=-1, multi_label=multi_label, num_labels=1)
 
     if mode == "clf" and multi_label:
