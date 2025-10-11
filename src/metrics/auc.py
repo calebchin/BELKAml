@@ -40,9 +40,15 @@ class MaskedAUC(nn.Module):
             y_pred = y_pred[mask]
 
         elif self.mode == "clf":
-            mask = y_true != self.mask
-            y_pred = y_pred[mask]
-            y_true = y_true[mask]
+            if self.mask:
+                # Drop the entire row where any label equals the mask?
+                row_mask = ~(y_true == self.mask).any(dim=1)
+                y_true = y_true[row_mask]
+                y_pred = y_pred[row_mask]
+            else:
+                mask = y_true != self.mask
+                y_pred = y_pred[mask]
+                y_true = y_true[mask]
 
         else:
             y_true = y_true.view(-1)
