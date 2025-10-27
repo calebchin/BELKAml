@@ -40,6 +40,7 @@ dependencies = [
     "torchmetrics",
     "dask",
     "kfp>=2.14.6",
+    "google-cloud-bigquery"
 ]
 
 [project.optional-dependencies]
