@@ -19,8 +19,7 @@ def preprocess_gcs(
     raw_data: Input[Dataset],
     data: Output[Dataset],
 ) -> None:
-    """
-    Preprocesses the raw dataset by dropping unnecessary columns.
+    """Preprocesses the raw dataset by dropping unnecessary columns.
 
     This component reads the data exported from BigQuery in Parquet or CSV format, drops any
     unnecessary columns, and writes the dataset to the output artifact location.
@@ -36,6 +35,7 @@ def preprocess_gcs(
     -------
     None
         The preprocessed dataset is saved to the output artifact's GCS URI.
+
     """
     import logging
     import pandas as pd

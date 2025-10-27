@@ -16,8 +16,7 @@ def split_train_val_test_gcs(
     stratify_column: Optional[str] = None,
     random_state: int = 42,
 ) -> None:
-    """
-    Splits a dataset into train, validation, and test sets.
+    """Splits a dataset into train, validation, and test sets.
 
     Parameters
     ----------
@@ -42,6 +41,7 @@ def split_train_val_test_gcs(
     -------
     None
         The train, validation, and test sets are saved as separate output artifacts on GCS.
+
     """
     import pandas as pd
     from sklearn.model_selection import train_test_split

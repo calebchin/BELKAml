@@ -22,7 +22,7 @@ from vertex_ai.components.split import split_train_val_test_gcs
 
 
 @pipeline(name="BELKAml-train-pipeline", pipeline_root="gs://my-bucket/pipeline_root/")
-def train_pipeline(bq_project_id : str, bq_dataset_id : str, bq_table_id : str):
+def train_pipeline(bq_project_id: str, bq_dataset_id: str, bq_table_id: str):
     # Step 1: Ingest
     ingest_task = extract_bq_to_gcs(
         bq_project_id=bq_project_id,
@@ -38,7 +38,7 @@ def train_pipeline(bq_project_id : str, bq_dataset_id : str, bq_table_id : str):
         data=preprocess_task.outputs["data"],
         test_size=0.2,
         val_size=0.1,
-        stratify_column="protein_smiles"  # TODO: Is this right?
+        stratify_column="protein_smiles",  # TODO: Is this right?
     )
 
     # Step 4: Train

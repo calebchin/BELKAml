@@ -1,11 +1,11 @@
 gcs:
   # The bucket to move files to after they are processed successfully
-  archive_bucket_name: "your-processed-data-archive-bucket" 
+  archive_bucket_name: "belkaml_archive_data"
 
 bigquery:
-  project: "your-gcp-project-id"
-  dataset: "your_dataset_name"
-  table: "your_binding_affinity_table"
+  project: "belkaml"
+  dataset: "belka_train_dataset"
+  table: "all_data"
 
 data_preprocessing:
   experimental_batch_num: 1

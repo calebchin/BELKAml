@@ -6,27 +6,37 @@ from typing import Any
 PIPELINE = MoleculeDataPipeline(config_path="config.yaml")
 STORAGE_CLIENT = storage.Client()
 
+
 def new_data_ingest_entrypoint(event: dict, context: Any) -> None:
     """Cloud Function entry point triggered by a GCS file upload.
     Orchestrates processing, loading, and archiving of the file.
-    
+
     Args:
         event (dict): Event payload.
         context (google.cloud.functions.Context): Metadata for the event.
-    
+
     """
-    bucket_name = event['bucket']
-    file_name = event['name']
-    
-    try:
-        archive_bucket_name = PIPELINE.config['gcs']['archive_bucket_name']
-    except KeyError:
-        PIPELINE.logger.error("'archive_bucket_name' not found in config.yaml under 'gcs'.")
-        raise
-    if bucket_name == archive_bucket_name:
-        PIPELINE.logger.info(f"File '{file_name}' is in the archive bucket. No processing needed.")
+    bucket_name = event["bucket"]
+    file_name = event["name"]
+
+    target_folder = 'uploads/'
+    if not file_name.startswith(target_folder):
+        PIPELINE.logger.info(f"Skipping file '{file_name}' as it's not in the '{target_folder}' folder.")
         return
     
+    try:
+        archive_bucket_name = PIPELINE.config["gcs"]["archive_bucket_name"]
+    except KeyError:
+        PIPELINE.logger.error(
+            "'archive_bucket_name' not found in config.yaml under 'gcs'."
+        )
+        raise
+    if bucket_name == archive_bucket_name:
+        PIPELINE.logger.info(
+            f"File '{file_name}' is in the archive bucket. No processing needed."
+        )
+        return
+
     try:
         # Process and load data
         processed_df = PIPELINE.process_data(bucket_name, file_name)
@@ -37,14 +47,17 @@ def new_data_ingest_entrypoint(event: dict, context: Any) -> None:
         source_bucket = STORAGE_CLIENT.bucket(bucket_name)
         source_blob = source_bucket.blob(file_name)
         archive_bucket = STORAGE_CLIENT.bucket(archive_bucket_name)
-        
+
         # Copy the blob to the archive bucket and then delete it from the source
         source_bucket.copy_blob(source_blob, archive_bucket, file_name)
         source_blob.delete()
-        
-        PIPELINE.logger.info(f"Successfully archived {file_name} to {archive_bucket_name}.")
+
+        PIPELINE.logger.info(
+            f"Successfully archived {file_name} to {archive_bucket_name}."
+        )
 
     except Exception as e:
-        PIPELINE.logger.error(f"Pipeline failed for file {file_name}. Error: {e}", exc_info=True)
-        # You might want to move the file to an 'error' bucket here
+        PIPELINE.logger.error(
+            f"Pipeline failed for file {file_name}. Error: {e}", exc_info=True
+        )
         raise
