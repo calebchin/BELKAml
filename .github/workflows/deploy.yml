@@ -1,0 +1,41 @@
+name: Deploy to Google Cloud Functions
+
+# Run this workflow on every push to the main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    # Add permissions to fetch the OIDC token
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    - name: Deploy Cloud Function
+      id: deploy
+      uses: google-github-actions/deploy-cloud-functions@v2
+      with:
+        name: new_data_ingest_entrypoint  # The name of your function
+        runtime: python312
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        region: northamerica-northeast2
+        entry_point: new_data_ingest_entrypoint
+        source_dir: src/ingestion
+        # Eventarc trigger for GCS
+        event_trigger_type: google.cloud.storage.object.v1.finalized
+        event_trigger_resource: belkaml_new_data

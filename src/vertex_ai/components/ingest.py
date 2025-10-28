@@ -11,8 +11,7 @@ def extract_bq_to_gcs(
     bq_table_id: str,
     raw_data: Output[Dataset],
 ) -> None:
-    """
-    Extracts a BigQuery table and saves it as a Parquet file in Google Cloud Storage (GCS).
+    """Extracts a BigQuery table and saves it as a Parquet file in Google Cloud Storage (GCS).
 
     This component uses the BigQuery client to export the specified table to a GCS
     destination automatically provided by the output `raw_data` artifact.
@@ -45,8 +44,8 @@ def extract_bq_to_gcs(
     - The extracted file format is Parquet.
     - The extraction is performed in the `US` region by default.
     - The destination GCS URI is automatically set by the Kubeflow Pipelines orchestrator.
-    """
 
+    """
     import logging
     from google.cloud import bigquery
 
