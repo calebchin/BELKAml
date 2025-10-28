@@ -5,6 +5,7 @@ import torch.nn as nn
 from skfp.fingerprints import ECFPFingerprint
 
 
+# This makes more sense as a util
 class FPGenerator(nn.Module):
     """Fingerprint generator module using ECFP (Extended-Connectivity Fingerprint).
 
@@ -38,6 +39,7 @@ class FPGenerator(nn.Module):
             where B is batch size and F is fingerprint dimension.
 
         """
+        # TODO: do this offline?
         x = self.transformer.transform(
             inputs.detach().cpu().numpy().astype(str).tolist()
         )

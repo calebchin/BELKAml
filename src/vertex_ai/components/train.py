@@ -1,4 +1,5 @@
-from kfp.v2.dsl import component, Input, Output, Dataset, Model
+from kfp.dsl import ClassificationMetrics
+from kfp.v2.dsl import component, Input, Output, Dataset, Model, Metrics
 
 
 @component(
@@ -8,6 +9,10 @@ def train_model(
     train_data: Input[Dataset],
     val_data: Input[Dataset],
     model: Output[Model],
-    random_state: int = 42,
+    train_metrics: Output[Metrics],
+    val_metrics: Output[Metrics],
+    classification_metrics: Output[ClassificationMetrics],
+    batch_size: int = 1024,
+    target_column: str = "binds",
 ) -> None:
     pass

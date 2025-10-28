@@ -56,6 +56,7 @@ def split_train_val_test_gcs(
     else:
         raise ValueError(f"Unsupported file format: {data_path.suffix}")
 
+    # exclude one of the building blocks
     train_val_df, test_df = train_test_split(
         df,
         test_size=test_size,
