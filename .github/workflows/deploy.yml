@@ -35,6 +35,7 @@ jobs:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         region: northamerica-northeast2
         entry_point: new_data_ingest_entrypoint
+        source_dir: src/ingestion
         # Eventarc trigger for GCS
         event_trigger_type: google.cloud.storage.object.v1.finalized
         event_trigger_resource: belkaml_new_data
