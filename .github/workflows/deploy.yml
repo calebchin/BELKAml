@@ -1,6 +1,6 @@
 name: Deploy to Google Cloud Functions
 
-# Run this workflow on every push to the main branch [TEMP: using test_deploy]
+# Run this workflow on every push to the main branch [TEMP: using test_deploy attempt 2]
 on:
   push:
     branches:
