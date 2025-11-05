@@ -33,7 +33,7 @@ jobs:
         name: new_data_ingest_entrypoint  # The name of your function
         runtime: python312
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-        region: northamerica-northeast2
+        region: northamerica-northeast2-a
         entry_point: new_data_ingest_entrypoint
         source_dir: src/ingestion
         # Eventarc trigger for GCS
