@@ -78,7 +78,7 @@ jobs:
 
     - name: 'Deploy Cloud Function (2nd Gen)'
       run: |
-        gcloud functions deploy new-data-ingest-entrypoint \
+        gcloud functions deploy new_data_ingest_entrypoint \
           --gen2 \
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --region=northamerica-northeast2 \
