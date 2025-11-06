@@ -81,7 +81,7 @@ jobs:
         gcloud functions deploy new-data-ingest-entrypoint \
           --gen2 \
           --project=${{ secrets.GCP_PROJECT_ID }} \
-          --region=us-central1 \
+          --region=northamerica-northeast2 \
           --runtime=python312 \
           --entry-point=new_data_ingest_entrypoint \
           --source=src/ingestion \
