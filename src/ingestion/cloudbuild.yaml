@@ -1,0 +1,57 @@
+# cloudbuild.yaml
+steps:
+# 1. Build the container
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build',
+    '-t', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/new-data-ingest:${_COMMIT_SHA}',
+    '--build-arg', 'FUNCTION_TARGET=new_data_ingest_entrypoint',
+    './src/ingestion'  # Path to your Dockerfile and source
+  ]
+
+# 2. Push the container to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/new-data-ingest:${_COMMIT_SHA}']
+
+# 3. Deploy the new image to Cloud Run
+- name: 'gcr.io/google-github-actions/setup-gcloud'
+  entrypoint: gcloud
+  args: [
+    'run', 'deploy', 'new-data-ingest-entrypoint',
+    '--image', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/new-data-ingest:${_COMMIT_SHA}',
+    '--region', 'northamerica-northeast2',
+    '--service-account', '${_PROJECT_ID}@appspot.gserviceaccount.com',
+    '--no-allow-unauthenticated'
+  ]
+
+# 4. Ensure the Eventarc trigger is pointing to the service
+- name: 'gcr.io/google-github-actions/setup-gcloud'
+  entrypoint: gcloud
+  args: [
+    'eventarc', 'triggers', 'create', 'new-data-ingest-entrypoint',
+    '--location', 'northamerica-northeast2',
+    '--destination-run-service', 'new-data-ingest-entrypoint',
+    '--destination-run-region', 'northamerica-northeast2',
+    '--event-filters', 'type=google.cloud.storage.object.v1.finalized',
+    '--event-filters', 'bucket=belkaml_new_data',
+    '--service-account', '${_PROJECT_ID}@appspot.gserviceaccount.com'
+  ]
+  # This 'id' is used in the 'waitFor' below
+  id: 'create-trigger'
+  
+# 5. Handle the 409 error if trigger already exists.
+# This runs *only if* the 'create-trigger' step fails.
+- name: 'gcr.io/google-github-actions/setup-gcloud'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - 'echo "Trigger already exists, which is expected. Continuing..."'
+  waitFor: ['-create-trigger'] # The '-' means "run on failure"
+
+images:
+- 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/new-data-ingest:${_COMMIT_SHA}'
+
+# Define substitutions (we will pass these from GitHub Actions)
+substitutions:
+  _PROJECT_ID: 'your-project-id' # Will be overridden
+  _COMMIT_SHA: 'latest'           # Will be overridden

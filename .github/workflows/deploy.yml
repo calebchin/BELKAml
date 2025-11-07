@@ -1,6 +1,52 @@
+# # name: Deploy to Google Cloud Functions
+
+# # # Run this workflow on every push to the main branch [TEMP: using test_deploy attempt 3]
+# # on:
+# #   push:
+# #     branches:
+# #       - test_deploy
+
+# # jobs:
+# #   deploy:
+# #     runs-on: ubuntu-latest
+    
+# #     # Add permissions to fetch the OIDC token
+# #     permissions:
+# #       contents: 'read'
+# #       id-token: 'write'
+
+# #     steps:
+# #     - name: Checkout code
+# #       uses: actions/checkout@v4
+
+# #     - name: Authenticate to Google Cloud
+# #       id: auth
+# #       uses: google-github-actions/auth@v2
+# #       with:
+# #         workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+# #         service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+# #     - name: Deploy Cloud Function
+# #       id: deploy
+# #       uses: google-github-actions/deploy-cloud-functions@v2
+# #       with:
+# #         name: new_data_ingest_entrypoint  # The name of your function
+# #         runtime: python312
+# #         project_id: ${{ secrets.GCP_PROJECT_ID }}
+# #         region: us-central1
+# #         entry_point: new_data_ingest_entrypoint
+# #         source_dir: src/ingestion
+# #         # Eventarc trigger for GCS
+# #         event_trigger_type: google.cloud.storage.object.v1.finalized
+        
+# #         # 2. Use Eventarc filters instead of the 1st Gen 'resource'
+# #         event_trigger_filters: "bucket=belkaml_new_data"
+# #         #event_trigger_type: google.cloud.storage.object.v1.finalized
+# #         #event_trigger_resource: belkaml_new_data
+
 # name: Deploy to Google Cloud Functions
 
-# # Run this workflow on every push to the main branch [TEMP: using test_deploy attempt 3]
+# # Run this workflow on every push to the main branch [TEMP: using test_deploy]
 # on:
 #   push:
 #     branches:
@@ -17,36 +63,69 @@
 
 #     steps:
 #     - name: Checkout code
-#       uses: actions/checkout@v4
+#       uses: 'actions/checkout@v4'
 
 #     - name: Authenticate to Google Cloud
 #       id: auth
-#       uses: google-github-actions/auth@v2
+#       uses: 'google-github-actions/auth@v2'
 #       with:
 #         workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
 #         service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-#     - name: Deploy Cloud Function
-#       id: deploy
-#       uses: google-github-actions/deploy-cloud-functions@v2
-#       with:
-#         name: new_data_ingest_entrypoint  # The name of your function
-#         runtime: python312
-#         project_id: ${{ secrets.GCP_PROJECT_ID }}
-#         region: us-central1
-#         entry_point: new_data_ingest_entrypoint
-#         source_dir: src/ingestion
-#         # Eventarc trigger for GCS
-#         event_trigger_type: google.cloud.storage.object.v1.finalized
-        
-#         # 2. Use Eventarc filters instead of the 1st Gen 'resource'
-#         event_trigger_filters: "bucket=belkaml_new_data"
-#         #event_trigger_type: google.cloud.storage.object.v1.finalized
-#         #event_trigger_resource: belkaml_new_data
+#     - name: 'Set up Cloud SDK'
+#       uses: 'google-github-actions/setup-gcloud@v2'
 
-name: Deploy to Google Cloud Functions
+#     - name: 'Deploy Cloud Run service'
+#       run: |
+#         gcloud run deploy new-data-ingest-entrypoint \
+#           --project=${{ secrets.GCP_PROJECT_ID }} \
+#           --region=northamerica-northeast2 \
+#           --entry-point=new_data_ingest_entrypoint \
+#           --source=src/ingestion \
+#           --service-account=${{ secrets.GCP_PROJECT_ID }}@appspot.gserviceaccount.com \
+#           --no-allow-unauthenticated # This is a GCS function, so it shouldn't be public
 
-# Run this workflow on every push to the main branch [TEMP: using test_deploy]
+#     - name: 'Create/Ensure Eventarc trigger exists'
+#       run: |
+#         gcloud eventarc triggers create new-data-ingest-entrypoint \
+#           --project=${{ secrets.GCP_PROJECT_ID }} \
+#           --location=northamerica-northeast2 \
+#           --destination-run-service=new-data-ingest-entrypoint \
+#           --destination-run-region=northamerica-northeast2 \
+#           --event-filters="type=google.cloud.storage.object.v1.finalized" \
+#           --event-filters="bucket=belkaml_new_data" \
+#           --service-account=${{ secrets.GCP_PROJECT_ID }}@appspot.gserviceaccount.com \
+#           || echo "Eventarc trigger 'new-data-ingest-entrypoint' already exists."
+
+#     # - name: Checkout code
+#     #   uses: actions/checkout@v4
+
+#     # - name: Authenticate to Google Cloud
+#     #   id: auth
+#     #   uses: google-github-actions/auth@v2
+#     #   with:
+#     #     workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#     #     service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    
+#     # - name: 'Set up Cloud SDK'
+#     #   uses: 'google-github-actions/setup-gcloud@v2'
+
+#     # - name: 'Deploy Cloud Function (2nd Gen)'
+#     #   run: |
+#     #     gcloud functions deploy new_data_ingest_entrypoint \
+#     #       --gen2 \
+#     #       --project=${{ secrets.GCP_PROJECT_ID }} \
+#     #       --region=northamerica-northeast2 \
+#     #       --runtime=python312 \
+#     #       --entry-point=new_data_ingest_entrypoint \
+#     #       --source=src/ingestion \
+#     #       --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
+#     #       --trigger-event-filters="bucket=belkaml_new_data"
+
+# deploy.yml
+name: Deploy to Google Cloud
+
 on:
   push:
     branches:
@@ -55,8 +134,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
-    # Add permissions to fetch the OIDC token
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -75,50 +152,8 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: 'Deploy Cloud Run service'
+    - name: 'Submit build to Cloud Build'
       run: |
-        gcloud run deploy new-data-ingest-entrypoint \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --region=northamerica-northeast2 \
-          --entry-point=new_data_ingest_entrypoint \
-          --source=src/ingestion \
-          --service-account=${{ secrets.GCP_PROJECT_ID }}@appspot.gserviceaccount.com \
-          --no-allow-unauthenticated # This is a GCS function, so it shouldn't be public
-
-    - name: 'Create/Ensure Eventarc trigger exists'
-      run: |
-        gcloud eventarc triggers create new-data-ingest-entrypoint \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --location=northamerica-northeast2 \
-          --destination-run-service=new-data-ingest-entrypoint \
-          --destination-run-region=northamerica-northeast2 \
-          --event-filters="type=google.cloud.storage.object.v1.finalized" \
-          --event-filters="bucket=belkaml_new_data" \
-          --service-account=${{ secrets.GCP_PROJECT_ID }}@appspot.gserviceaccount.com \
-          || echo "Eventarc trigger 'new-data-ingest-entrypoint' already exists."
-
-    # - name: Checkout code
-    #   uses: actions/checkout@v4
-
-    # - name: Authenticate to Google Cloud
-    #   id: auth
-    #   uses: google-github-actions/auth@v2
-    #   with:
-    #     workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-    #     service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-    
-    # - name: 'Set up Cloud SDK'
-    #   uses: 'google-github-actions/setup-gcloud@v2'
-
-    # - name: 'Deploy Cloud Function (2nd Gen)'
-    #   run: |
-    #     gcloud functions deploy new_data_ingest_entrypoint \
-    #       --gen2 \
-    #       --project=${{ secrets.GCP_PROJECT_ID }} \
-    #       --region=northamerica-northeast2 \
-    #       --runtime=python312 \
-    #       --entry-point=new_data_ingest_entrypoint \
-    #       --source=src/ingestion \
-    #       --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
-    #       --trigger-event-filters="bucket=belkaml_new_data"
+        gcloud builds submit . \
+          --config=cloudbuild.yaml \
+          --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}"
