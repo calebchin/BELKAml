@@ -196,4 +196,5 @@ jobs:
       run: |
         gcloud builds submit ./src/ingestion \
           --config=./src/ingestion/cloudbuild.yaml \
-          --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}"
+          --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}" \
+          --suppress-logs
