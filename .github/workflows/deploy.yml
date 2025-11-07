@@ -80,7 +80,6 @@ jobs:
         gcloud run deploy new-data-ingest-entrypoint \
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --region=northamerica-northeast2 \
-          --runtime=python312 \
           --entry-point=new_data_ingest_entrypoint \
           --source=src/ingestion \
           --service-account=${{ secrets.GCP_PROJECT_ID }}@appspot.gserviceaccount.com \
