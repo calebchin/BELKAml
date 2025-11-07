@@ -123,13 +123,53 @@
 #     #       --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
 #     #       --trigger-event-filters="bucket=belkaml_new_data"
 
-# deploy.yml
-name: Deploy to Google Cloud
+
+# name: Deploy to Google Cloud
+
+# on:
+#   push:
+#     branches:
+#       - test_deploy
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: 'read'
+#       id-token: 'write'
+
+#     steps:
+#     - name: Checkout code
+#       uses: 'actions/checkout@v4'
+
+#     - name: Authenticate to Google Cloud
+#       id: auth
+#       uses: 'google-github-actions/auth@v2'
+#       with:
+#         workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#         service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+#     - name: 'Set up Cloud SDK'
+#       uses: 'google-github-actions/setup-gcloud@v2'
+
+#     - name: 'Submit build to Cloud Build'
+#       run: |
+#         gcloud builds submit . \
+#           --config=cloudbuild.yaml \
+#           --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}"
+
+# .github/workflows/deploy-ingestion.yml
+
+name: Deploy Ingestion Component
 
 on:
   push:
     branches:
+      - main
       - test_deploy
+    # This is the key: only run this file for changes in this path
+    paths:
+      - 'src/ingestion/**'
 
 jobs:
   deploy:
@@ -152,8 +192,8 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: 'Submit build to Cloud Build'
+    - name: 'Submit Ingestion build'
       run: |
-        gcloud builds submit . \
-          --config=cloudbuild.yaml \
+        gcloud builds submit ./src/ingestion \
+          --config=./src/ingestion/cloudbuild.yaml \
           --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}"
