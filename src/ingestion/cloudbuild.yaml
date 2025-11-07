@@ -1,4 +1,3 @@
-# src/ingestion/cloudbuild.yaml
 steps:
 # 1. Build the container
 - name: 'gcr.io/cloud-builders/docker'
@@ -6,14 +5,14 @@ steps:
     'build',
     '-t', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/new-data-ingest:${_COMMIT_SHA}',
     '--build-arg', 'FUNCTION_TARGET=new_data_ingest_entrypoint',
-    '.'  # <-- '.' now correctly refers to the 'src/ingestion' folder
+    '.'
   ]
 
-# 2. Push the container
+# 2. Push the container to Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/new-data-ingest:${_COMMIT_SHA}']
 
-# 3. Deploy to Cloud Run
+# 3. Deploy the new image to Cloud Run
 - name: 'gcr.io/google-github-actions/setup-gcloud'
   entrypoint: gcloud
   args: [
@@ -24,20 +23,27 @@ steps:
     '--no-allow-unauthenticated'
   ]
 
-# 4. Ensure Eventarc trigger
-- name: 'gcr.io/google-github-actions/setup-gcloud'
-  entrypoint: gcloud
-  args: [
-    'eventarc', 'triggers', 'create', 'new-data-ingest-entrypoint',
-    # ... all other trigger args ...
-  ]
-  id: 'create-trigger'
-
-# 5. Handle "already exists" error
+# 4. Ensure the Eventarc trigger exists (Idempotent)
+# We use 'bash' as the entrypoint so we can use '||' to catch errors.
+# If 'gcloud ... create' fails (e.g., because it already exists),
+# the '|| echo ...' part runs and ensures the step still exits successfully (exit code 0).
 - name: 'gcr.io/google-github-actions/setup-gcloud'
   entrypoint: 'bash'
-  args: ['-c', 'echo "Trigger already exists."']
-  waitFor: ['-create-trigger'] # Runs on failure of previous step
+  args:
+    - '-c'
+    - |
+      gcloud eventarc triggers create new-data-ingest-entrypoint \
+        --location=northamerica-northeast2 \
+        --destination-run-service=new-data-ingest-entrypoint \
+        --destination-run-region=northamerica-northeast2 \
+        --event-filters="type=google.cloud.storage.object.v1.finalized" \
+        --event-filters="bucket=belkaml_new_data" \
+        --service-account=${_PROJECT_ID}@appspot.gserviceaccount.com \
+        || echo "Trigger creation failed; assuming it already exists and continuing."
 
 images:
 - 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/new-data-ingest:${_COMMIT_SHA}'
+
+substitutions:
+  _PROJECT_ID: 'required'
+  _COMMIT_SHA: 'latest'
