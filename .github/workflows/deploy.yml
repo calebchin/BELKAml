@@ -63,27 +63,63 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: 'actions/checkout@v4'
 
     - name: Authenticate to Google Cloud
       id: auth
-      uses: google-github-actions/auth@v2
+      uses: 'google-github-actions/auth@v2'
       with:
         workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
         service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-    
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: 'Deploy Cloud Function (2nd Gen)'
+    - name: 'Deploy Cloud Run service'
       run: |
-        gcloud functions deploy new_data_ingest_entrypoint \
-          --gen2 \
+        gcloud run deploy new-data-ingest-entrypoint \
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --region=northamerica-northeast2 \
           --runtime=python312 \
           --entry-point=new_data_ingest_entrypoint \
           --source=src/ingestion \
-          --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
-          --trigger-event-filters="bucket=belkaml_new_data"
+          --service-account=${{ secrets.GCP_PROJECT_ID }}@appspot.gserviceaccount.com \
+          --no-allow-unauthenticated # This is a GCS function, so it shouldn't be public
+
+    - name: 'Create/Ensure Eventarc trigger exists'
+      run: |
+        gcloud eventarc triggers create new-data-ingest-entrypoint \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --location=northamerica-northeast2 \
+          --destination-run-service=new-data-ingest-entrypoint \
+          --destination-run-region=northamerica-northeast2 \
+          --event-filters="type=google.cloud.storage.object.v1.finalized" \
+          --event-filters="bucket=belkaml_new_data" \
+          --service-account=${{ secrets.GCP_PROJECT_ID }}@appspot.gserviceaccount.com \
+          || echo "Eventarc trigger 'new-data-ingest-entrypoint' already exists."
+
+    # - name: Checkout code
+    #   uses: actions/checkout@v4
+
+    # - name: Authenticate to Google Cloud
+    #   id: auth
+    #   uses: google-github-actions/auth@v2
+    #   with:
+    #     workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+    #     service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    
+    # - name: 'Set up Cloud SDK'
+    #   uses: 'google-github-actions/setup-gcloud@v2'
+
+    # - name: 'Deploy Cloud Function (2nd Gen)'
+    #   run: |
+    #     gcloud functions deploy new_data_ingest_entrypoint \
+    #       --gen2 \
+    #       --project=${{ secrets.GCP_PROJECT_ID }} \
+    #       --region=northamerica-northeast2 \
+    #       --runtime=python312 \
+    #       --entry-point=new_data_ingest_entrypoint \
+    #       --source=src/ingestion \
+    #       --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
+    #       --trigger-event-filters="bucket=belkaml_new_data"
