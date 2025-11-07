@@ -168,8 +168,8 @@ on:
       - main
       - test_deploy
     # This is the key: only run this file for changes in this path
-    paths:
-      - 'src/ingestion/**'
+    # paths:
+    #   - 'src/ingestion/**'
 
 jobs:
   deploy:
