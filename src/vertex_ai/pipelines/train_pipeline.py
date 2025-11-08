@@ -5,8 +5,9 @@ from vertex_ai.components.preprocess import preprocess_gcs
 from vertex_ai.components.split import split_train_val_test_gcs
 from vertex_ai.components.train import train_model
 from vertex_ai.components.test import test_model
-from vertex_ai.components.deploy import deploy_to_aiplatform
+from vertex_ai.components.deploy import deploy_model_to_aip
 
+from typing import Optional
 
 # https://github.com/GoogleCloudPlatform/vertex-pipelines-end-to-end-samples/blob/main/pipelines/src/pipelines/xgboost/training/pipeline.py
 #
@@ -24,11 +25,23 @@ from vertex_ai.components.deploy import deploy_to_aiplatform
 #  6. Deployment.
 
 
-@pipeline(name="BELKAml-train-pipeline", pipeline_root="gs://my-bucket/pipeline_root/")
-def train_pipeline(bq_project_id: str, bq_dataset_id: str, bq_table_id: str):
+@pipeline(
+    name="BELKAml-train-pipeline", pipeline_root="gs://belkaml_pipeline_artifacts"
+)
+def train_pipeline(
+    bq_project_id: str,
+    bq_project_location: str,
+    bq_dataset_id: str,
+    bq_table_id: str,
+    aip_project_id: str,
+    aip_project_location: str,
+    stratify_column: Optional[str],
+    y_column: str,
+):
     # Step 1: Ingest
     ingest_task = extract_bq_to_gcs(
         bq_project_id=bq_project_id,
+        bq_project_location=bq_project_location,
         bq_dataset_id=bq_dataset_id,
         bq_table_id=bq_table_id,
     )
@@ -41,7 +54,7 @@ def train_pipeline(bq_project_id: str, bq_dataset_id: str, bq_table_id: str):
         data=preprocess_task.outputs["data"],
         test_size=0.2,
         val_size=0.1,
-        stratify_column="protein_smiles",  # TODO: Is this right?
+        stratify_column=stratify_column,
     )
 
     # Step 4: Train
@@ -49,7 +62,7 @@ def train_pipeline(bq_project_id: str, bq_dataset_id: str, bq_table_id: str):
         train_data=split_task.outputs["train_data"],
         val_data=split_task.outputs["val_data"],
         batch_size=1024,
-        y_column="binds",
+        y_column=y_column,
     )
 
     # Step 5: Test
@@ -57,19 +70,15 @@ def train_pipeline(bq_project_id: str, bq_dataset_id: str, bq_table_id: str):
         test_data=split_task.outputs["test_data"],
         model=train_task.outputs["model"],
         batch_size=1024,
-        y_column="binds",
+        y_column=y_column,
     )
 
     # Step 6: Deploy
-    deploy_task = deploy_model_to_aiplatform(
+    deploy_task = deploy_model_to_aip(
+        aip_project_id=aip_project_id,
+        aip_project_location=aip_project_location,
         model=train_task.outputs["model"],
         train_metrics=training_task.outputs["train_metrics"],
         val_metrics=training_task.outputs["val_metrics"],
         test_metrics=evaluation_task.outputs["test_metrics"],
     )
-
-
-if __name__ == "__main__":
-    from kfp.compiler import Compiler
-
-    Compiler().compile(pipeline_func=train_pipeline, package_path="train_pipeline.yaml")
