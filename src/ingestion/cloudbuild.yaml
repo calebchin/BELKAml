@@ -13,7 +13,7 @@ steps:
   args: ['push', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/new-data-ingest:${_COMMIT_SHA}']
 
 # 3. Deploy the new image to Cloud Run
-- name: 'gcr.io/google-github-actions/setup-gcloud'
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args: [
     'run', 'deploy', 'new-data-ingest-entrypoint',
@@ -23,11 +23,8 @@ steps:
     '--no-allow-unauthenticated'
   ]
 
-# 4. Ensure the Eventarc trigger exists (Idempotent)
-# We use 'bash' as the entrypoint so we can use '||' to catch errors.
-# If 'gcloud ... create' fails (e.g., because it already exists),
-# the '|| echo ...' part runs and ensures the step still exits successfully (exit code 0).
-- name: 'gcr.io/google-github-actions/setup-gcloud'
+# 4. Ensure the Eventarc trigger exists
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'bash'
   args:
     - '-c'
