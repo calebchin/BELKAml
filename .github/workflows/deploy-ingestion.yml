@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+       - 'src/ingestion/**'
+       - '.github/workflows/deploy-ingestion.yml'
 
 jobs:
   deploy:
