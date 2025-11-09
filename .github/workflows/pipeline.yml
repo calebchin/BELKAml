@@ -3,7 +3,7 @@ name: VertexAI pipeline deployment # is this an accurate name?
 on:
   push:
     branches:
-      - main
+      - compile_train_pipe
     paths:
       - "src/vertex_ai/*"
 
