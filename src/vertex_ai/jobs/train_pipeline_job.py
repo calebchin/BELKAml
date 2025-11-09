@@ -1,7 +1,6 @@
 from google.cloud import aiplatform as aip
 from kfp.v2 import compiler
-from pipelines.train_pipeline import train_pipeline
-
+from vertex_ai.pipelines.train_pipeline import train_pipeline
 
 args = {
     "bq_project_id": "belkaml",
