@@ -1,4 +1,4 @@
-name: VertexAI pipeline deployment # is this an accurate name?
+name: Vertex AI pipeline deployment
 
 on:
   push:
