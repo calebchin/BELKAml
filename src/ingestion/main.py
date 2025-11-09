@@ -19,11 +19,13 @@ def new_data_ingest_entrypoint(event: dict, context: Any) -> None:
     bucket_name = event["bucket"]
     file_name = event["name"]
 
-    target_folder = 'uploads/'
+    target_folder = "uploads/"
     if not file_name.startswith(target_folder):
-        PIPELINE.logger.info(f"Skipping file '{file_name}' as it's not in the '{target_folder}' folder.")
+        PIPELINE.logger.info(
+            f"Skipping file '{file_name}' as it's not in the '{target_folder}' folder."
+        )
         return
-    
+
     try:
         archive_bucket_name = PIPELINE.config["gcs"]["archive_bucket_name"]
     except KeyError:
