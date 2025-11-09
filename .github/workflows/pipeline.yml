@@ -5,7 +5,7 @@ on:
     branches:
       - compile_train_pipe
     paths:
-      - "src/vertex_ai/*"
+      - "src/vertex_ai/**"
 
 permissions:
   contents: 'read'
