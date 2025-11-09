@@ -9,4 +9,4 @@ COPY . .
 
 ARG FUNCTION_TARGET=new_data_ingest_entrypoint
 
-CMD ["functions-framework", "--target=${FUNCTION_TARGET}"]
+CMD ["sh", "-c", "python -m functions_framework --target=${FUNCTION_TARGET} --port=${PORT:-8080}"]
