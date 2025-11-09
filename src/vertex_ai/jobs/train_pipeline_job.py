@@ -2,6 +2,7 @@ from google.cloud import aiplatform as aip
 from kfp.v2 import compiler
 from vertex_ai.pipelines.train_pipeline import train_pipeline
 
+# Test workflow 1
 args = {
     "bq_project_id": "belkaml",
     "bq_project_location": "US",
