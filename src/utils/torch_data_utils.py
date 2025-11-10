@@ -21,7 +21,6 @@ from rdkit import Chem
 import atomInSmiles
 import dask.dataframe as dd
 import pyarrow as pa
-import pyarrow.parquet as pq
 import itertools
 
 
@@ -139,7 +138,7 @@ class SMILESTokenizer:
     def _load_vocab(self, vocab_path: str) -> List[str]:
         with open(vocab_path, "r") as f:
             vocab = [line.strip() for line in f]
-            return ["[PAD]", "[MASK]"] + vocab
+            return ["[PAD]", "[MASK]", "[UNK]"] + vocab
 
     def encode(self, smiles_list: List[str], max_length: int) -> torch.Tensor:
         """Encodes list of SMILES strings into torch Tensor format"""
@@ -147,7 +146,7 @@ class SMILESTokenizer:
         encoded = []
         for tokens in tokenized_list:
             ids = [
-                self.token_to_id.get(token, self.token_to_id["[UNK]"])
+                self.token_to_id.get(token, self.token_to_id.get("[UNK]", 2))
                 for token in tokens
             ]
             ids = ids[:max_length]
@@ -157,53 +156,94 @@ class SMILESTokenizer:
 
 
 class BelkaDataset(Dataset):
-    """PyTorch dataset for BELKA parquet data handling"""
+    """PyTorch dataset for BELKA parquet data handling.
 
-    def __init__(self, parquet_path: str, subset: str = "train"):
-        self.parquet_file = pq.ParquetFile(parquet_path)
-        self.num_row_groups = self.parquet_file.num_row_groups
-        self.subset_filter = subset
+    Expects parquet with columns:
+    - protein_name (string): protein identifier
+    - molecule_smiles (string): SMILES representation of molecule
+    - binds (integer): binary binding label (0 or 1)
+    """
 
-        # precalc map for row groups for subset data
-        self.group_indices = self._create_index()
-        # NOTE: confirm n_bits exists in testing
-        self.ecfp_transformer = ECFPFingerprint(n_bits=2048)  # type: ignore
+    def __init__(self, parquet_path: str, subset: str = "train", val_split: float = 0.1, seed: int = 42,
+                 vocab_path: str = None, max_length: int = 128):
+        """Initialize BelkaDataset.
 
-    def _create_index(self) -> list:
-        """Scans parquet file to make row_group map (map train, val, test, groups)"""
-        index_map = []
-        subset_map = {"train": 0, "val": 1, "test": 2}
-        target_subset_id = subset_map[self.subset_filter]
+        Args:
+            parquet_path: Path to belka.parquet file
+            subset: 'train' or 'val'
+            val_split: Validation split fraction (default 0.1 = 10%)
+            seed: Random seed for reproducibility
+            vocab_path: Path to vocabulary file
+            max_length: Maximum sequence length for tokenization
 
-        for group_idx in range(self.num_row_groups):
-            row_group = self.parquet_file.read_row_group(group_idx, columns=["subset"])
-            subset_col = row_group.to_pandas()["subset"]
+        """
+        # Read full parquet file
+        df = pd.read_parquet(parquet_path)
 
-            # Find indices within this chunk that match our target subset
-            matching_indices = subset_col[subset_col == target_subset_id].index
-            for local_idx in matching_indices:
-                index_map.append((group_idx, local_idx))
+        # Create train/val split using numpy Generator
+        rng = np.random.default_rng(seed)
+        total_rows = len(df)
+        val_size = int(total_rows * val_split)
 
-        return index_map
+        # Shuffle indices
+        indices = rng.permutation(total_rows)
+
+        # Split indices
+        val_indices = indices[:val_size]
+        train_indices = indices[val_size:]
+
+        # Select subset
+        if subset == "train":
+            self.data = df.iloc[train_indices].reset_index(drop=True)
+        elif subset == "val":
+            self.data = df.iloc[val_indices].reset_index(drop=True)
+        else:
+            raise ValueError(f"subset must be 'train' or 'val', got {subset}")
+
+        # Initialize tokenizer if vocab provided
+        self.max_length = max_length
+        if vocab_path:
+            self.tokenizer = SMILESTokenizer(vocab_path)
+        else:
+            self.tokenizer = None
+
+        # Initialize ECFP transformer
+        self.ecfp_transformer = ECFPFingerprint(fp_size=2048)  # type: ignore
 
     def __len__(self):
-        return len(self.group_indices)
+        return len(self.data)
 
     def __getitem__(self, idx: int) -> Dict:
-        group_idx, local_idx_in_group = self.group_indices[idx]
-        row_group_df = self.parquet_file.read_row_group(group_idx).to_pandas()
-        row = row_group_df.iloc[local_idx_in_group]
+        row = self.data.iloc[idx]
 
-        smiles = row["smiles"]
-        smiles_no_linker = row["smiles_no_linker"]
-        binds = np.array(row["binds"], dtype=np.int8)
+        smiles = row["molecule_smiles"]
+        binds = int(row["binds"])
 
-        ecfp = self.ecfp_transformer.transform([smiles_no_linker])[0]
+        # Tokenize SMILES if tokenizer is available
+        if self.tokenizer:
+            tokens = atomInSmiles.smiles_tokenizer(smiles)
+            # Convert tokens to IDs
+            token_ids = [self.tokenizer.token_to_id.get(token, self.tokenizer.token_to_id.get("[UNK]", 2))
+                        for token in tokens]
+            # Truncate or pad
+            token_ids = token_ids[:self.max_length]
+            token_ids = token_ids + [self.tokenizer.token_to_id["[PAD]"]] * (self.max_length - len(token_ids))
+            smiles_tokens = torch.tensor(token_ids, dtype=torch.long)
+        else:
+            smiles_tokens = torch.zeros(self.max_length, dtype=torch.long)
+
+        # Generate ECFP fingerprint from SMILES
+        try:
+            ecfp = self.ecfp_transformer.transform([smiles])[0]
+        except Exception as e:
+            # If SMILES parsing fails, return zero vector
+            print(f"Warning: Failed to generate ECFP for SMILES: {smiles}, error: {e}")
+            ecfp = np.zeros(2048, dtype=np.float32)
 
         return {
-            "smiles": smiles,
-            "binds": torch.tensor(binds, dtype=torch.float),
-            "ecfp": torch.tensor(ecfp, dtype=torch.float),
+            "smiles": smiles_tokens,  # Tokenized SMILES
+            "binds": torch.tensor([binds], dtype=torch.float32),  # Single binary label
+            "ecfp": torch.tensor(ecfp, dtype=torch.float32),
         }
 
 

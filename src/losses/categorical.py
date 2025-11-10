@@ -67,7 +67,7 @@ class BinaryLoss(nn.Module):
     Used for FPs training.
     """
 
-    def __init__(self, gamma: float = 2.0, alpha: float = 0.25):
+    def __init__(self, gamma: float = 2.0, alpha: float = 0.25, **kwargs: dict):
         super().__init__()
         self.gamma = gamma
         self.alpha = alpha

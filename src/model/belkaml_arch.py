@@ -16,6 +16,7 @@ class Belka(nn.Module):
         mode: str,
         num_layers: int,
         vocab_size: int,
+        **kwargs: dict
     ):
         super(Belka, self).__init__()
 
@@ -49,14 +50,14 @@ class Belka(nn.Module):
             self.head = nn.Linear(hidden_size, vocab_size)
         else:
             if mode == "clf":
-                output_units = 3
+                output_units = 1  # Binary classification (single output)
             else:  # fps mode
                 output_units = 2048
 
-            self.head = nn.Sequential(
-                nn.AdaptiveAvgPool1d(1),  # Global average pooling
+            self.pool = nn.AdaptiveAvgPool1d(1)  # Global average pooling
+            self.classifier = nn.Sequential(
                 nn.Dropout(dropout_rate),
-                nn.Linear(hidden_size, output_units),
+                nn.Linear(32, output_units),  # Use depth=32 from encoder
                 nn.Sigmoid(),
             )
 
@@ -71,10 +72,11 @@ class Belka(nn.Module):
             x = self.head(x)
             x = f.softmax(x, dim=-1)
         else:
-            # For non-MLM modes, we need to handle the global pooling differently
-            # PyTorch's AdaptiveAvgPool1d expects (batch, channels, length)
-            x = x.transpose(1, 2)  # (batch, hidden, seq_len)
-            x = self.head(x)
-            x = x.squeeze(-1)  # Remove the pooled dimension
+            # For non-MLM modes: pool over sequence, then classify
+            # x shape: (batch, seq_len, depth)
+            x = x.transpose(1, 2)  # (batch, depth, seq_len)
+            x = self.pool(x)  # (batch, depth, 1)
+            x = x.squeeze(-1)  # (batch, depth)
+            x = self.classifier(x)  # (batch, output_units)
 
         return x
