@@ -49,19 +49,20 @@ def train_pipeline(
     # Step 2: Preprocess
     preprocess_task = preprocess_gcs(raw_data=ingest_task.outputs["raw_data"])
 
-    # Step 3: Split
+    # Step 3: Split (train/val only, test data is separate)
     split_task = split_train_val_test_gcs(
         data=preprocess_task.outputs["data"],
-        test_size=0.2,
+        test_size=0.0,  # No test split (test data is separate)
         val_size=0.1,
         stratify_column=stratify_column,
     )
 
     # Step 4: Train
+    # Training parameters are loaded from config file in GCS: gs://belkamlbucket/configs/vertex_train_config.yaml
     train_task = train_model(
         train_data=split_task.outputs["train_data"],
         val_data=split_task.outputs["val_data"],
-        batch_size=1024,
+        config_path="gs://belkamlbucket/configs/vertex_train_config.yaml",
         y_column=y_column,
     )
 
@@ -78,7 +79,7 @@ def train_pipeline(
         aip_project_id=aip_project_id,
         aip_project_location=aip_project_location,
         model=train_task.outputs["model"],
-        train_metrics=training_task.outputs["train_metrics"],
-        val_metrics=training_task.outputs["val_metrics"],
-        test_metrics=evaluation_task.outputs["test_metrics"],
+        train_metrics=train_task.outputs["train_metrics"],
+        val_metrics=train_task.outputs["val_metrics"],
+        test_metrics=test_task.outputs["test_metrics"],
     )

@@ -1,0 +1,57 @@
+# Vertex AI Training Configuration
+# This config is uploaded to GCS and read by the training component
+# GCS path: gs://belkamlbucket/configs/vertex_train_config.yaml
+
+# Pipeline Configuration
+pipeline_name: "BELKAml-train-pipeline"
+pipeline_root: "gs://belkaml_pipeline_artifacts"
+
+# BigQuery Configuration (for data ingestion component)
+bq_project_id: "belkaml"
+bq_project_location: "US"
+bq_dataset_id: "belka_train_dataset"
+bq_table_id: "all_data"
+
+# Vertex AI Configuration
+aip_project_id: "belkaml"
+aip_project_location: "northamerica-northeast2"
+
+# Data Configuration
+stratify_column: "protein_name"
+y_column: "binds"
+vocab_path: "gs://belkamlbucket/data/raw/vocab.txt"
+
+# Training Mode
+# Options: 'mlm' (masked language modeling), 'fps' (fingerprint), 'clf' (classification)
+mode: "clf"
+
+# Training Hyperparameters
+epochs: 10
+initial_epoch: 0
+steps_per_epoch: 100
+validation_steps: 20
+patience: 3  # Early stopping patience
+
+# Model Parameters
+model_name: "belka_clf"
+hidden_size: 32
+num_layers: 2
+vocab_size: 44  # 41 tokens from vocab.txt + 3 special tokens ([PAD], [MASK], [UNK])
+dropout_rate: 0.1
+
+# Data Parameters
+batch_size: 32
+max_length: 128
+seed: 42
+num_workers: 2
+val_split: 0.1  # Used by split component (10% validation split)
+
+# Optimizer Parameters
+lr: 0.001
+epsilon: 1e-7
+
+# Notes:
+# - Increase epochs and steps_per_epoch for production training
+# - Adjust batch_size based on available GPU memory
+# - vocab_size must match: (tokens in vocab.txt) + 3 special tokens
+# - Set num_workers=0 if running into DataLoader multiprocessing issues

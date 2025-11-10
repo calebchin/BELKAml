@@ -11,12 +11,12 @@ def split_train_val_test_gcs(
     train_data: Output[Dataset],
     val_data: Output[Dataset],
     test_data: Output[Dataset],
-    test_size: float = 0.2,
+    test_size: float = 0.0,  # Changed default to 0.0 (no test split by default)
     val_size: float = 0.1,
     stratify_column: Optional[str] = None,
     random_state: int = 42,
 ) -> None:
-    """Splits a dataset into train, validation, and test sets.
+    """Splits a dataset into train, validation, and optionally test sets.
 
     Parameters
     ----------
@@ -27,9 +27,9 @@ def split_train_val_test_gcs(
     val_data : Output[Dataset]
         Output artifact for the validation subset.
     test_data : Output[Dataset]
-        Output artifact for the test subset.
+        Output artifact for the test subset (only created if test_size > 0).
     test_size : float, optional
-        Fraction of data to allocate to the test set (default 0.2).
+        Fraction of data to allocate to the test set (default 0.0 = no test split).
     val_size : float, optional
         Fraction of the remaining data to allocate to the validation set (default 0.1).
     stratify_column : str, optional
@@ -40,7 +40,12 @@ def split_train_val_test_gcs(
     Returns
     -------
     None
-        The train, validation, and test sets are saved as separate output artifacts on GCS.
+        The train, validation, and optionally test sets are saved as separate output artifacts on GCS.
+
+    Notes
+    -----
+    - When test_size=0.0, only train/val split is performed (test data will be separate)
+    - When test_size>0.0, performs train/val/test split
 
     """
     import pandas as pd
@@ -56,25 +61,42 @@ def split_train_val_test_gcs(
     else:
         raise ValueError(f"Unsupported file format: {data_path.suffix}")
 
-    # exclude one of the building blocks
-    train_val_df, test_df = train_test_split(
-        df,
-        test_size=test_size,
-        stratify=df[stratify_column] if stratify_column else None,
-        random_state=random_state,
-    )
+    # If test_size is 0, skip test split and only do train/val
+    if test_size > 0.0:
+        # Three-way split: train, val, test
+        train_val_df, test_df = train_test_split(
+            df,
+            test_size=test_size,
+            stratify=df[stratify_column] if stratify_column else None,
+            random_state=random_state,
+        )
 
-    val_relative_size = val_size / (1 - test_size)
-    train_df, val_df = train_test_split(
-        train_val_df,
-        test_size=val_relative_size,
-        stratify=train_val_df[stratify_column] if stratify_column else None,
-        random_state=random_state,
-    )
+        val_relative_size = val_size / (1 - test_size)
+        train_df, val_df = train_test_split(
+            train_val_df,
+            test_size=val_relative_size,
+            stratify=train_val_df[stratify_column] if stratify_column else None,
+            random_state=random_state,
+        )
 
-    for split_df, split_data in zip(
-        [train_df, val_df, test_df], [train_data, val_data, test_data]
-    ):
+        splits = [train_df, val_df, test_df]
+        outputs = [train_data, val_data, test_data]
+    else:
+        # Two-way split: train, val only (test data is separate)
+        train_df, val_df = train_test_split(
+            df,
+            test_size=val_size,
+            stratify=df[stratify_column] if stratify_column else None,
+            random_state=random_state,
+        )
+
+        # Create empty dataframe for test_data output (required by KFP signature)
+        test_df = pd.DataFrame()
+
+        splits = [train_df, val_df, test_df]
+        outputs = [train_data, val_data, test_data]
+
+    for split_df, split_data in zip(splits, outputs):
         split_path = Path(split_data.path)
         split_path.parent.mkdir(parents=True, exist_ok=True)
 

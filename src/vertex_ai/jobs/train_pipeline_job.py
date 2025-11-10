@@ -2,14 +2,15 @@ from google.cloud import aiplatform as aip
 from kfp.v2 import compiler
 from vertex_ai.pipelines.train_pipeline import train_pipeline
 
-# Test workflow 1
+# Pipeline parameters (data source and basic config)
+# Training hyperparameters are loaded from gs://belkamlbucket/configs/vertex_train_config.yaml
 args = {
     "bq_project_id": "belkaml",
     "bq_project_location": "US",
     "bq_dataset_id": "belka_train_dataset",
     "bq_table_id": "all_data",
     "aip_project_id": "belkaml",
-    "aip_project_location": "us-central1-a",
+    "aip_project_location": "northamerica-northeast2",
     "stratify_column": "protein_name",
     "y_column": "binds",
 }

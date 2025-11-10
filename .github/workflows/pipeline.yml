@@ -4,10 +4,11 @@ on:
   push:
     branches:
       - compile_train_pipe
+      - test_deploy
     paths:
       - "src/vertex_ai/**"
-  workflow_dispatch:
-
+      - ".github/workflows/pipeline.yml"
+      
 permissions:
   contents: 'read'
   id-token: 'write'
@@ -41,6 +42,20 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: Build and push training Docker image
+        run: |
+          # Configure Docker to use gcloud as credential helper
+          gcloud auth configure-docker gcr.io
+
+          # Build training component image
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/belkaml-trainer:latest \
+            -f src/vertex_ai/components/training/Dockerfile .
+
+          # Push to Google Container Registry
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/belkaml-trainer:latest
+
+          echo "Docker image pushed to gcr.io/${{ secrets.GCP_PROJECT_ID }}/belkaml-trainer:latest"
 
       - name: Run train_pipeline_job.py to compile train pipeline
       # Run train_pipeline_job.py to compile our train pipeline into Vertex AI-formatted type yaml (compiler.Compiler())
