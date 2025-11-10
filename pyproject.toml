@@ -38,7 +38,8 @@ dependencies = [
     "atomInSmiles",
     "pyarrow",
     "torchmetrics",
-    "dask"
+    "dask",
+    "pyyaml"
 ]
 
 [project.optional-dependencies]

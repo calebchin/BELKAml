@@ -1,1 +1,1 @@
-from belkaml_arch import Belka
+from .belkaml_arch import Belka

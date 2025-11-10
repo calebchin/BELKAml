@@ -1,2 +1,2 @@
-from categorical import MultiLabelLoss, BinaryLoss
-from focal import CategoricalLoss
+from .categorical import MultiLabelLoss, BinaryLoss
+from .focal import CategoricalLoss

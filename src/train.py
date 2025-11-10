@@ -25,22 +25,22 @@ def train_model(
     """
 
     # Data loaders
-    train_loader, val_loader = train_val_set(**parameters)
+    train_loader, val_loader = train_val_set(**parameters, mode=mode, working=working)
 
     # Model setup
     if model is not None:
         model = load_model(model)  # Load PyTorch model from file
     else:
-        model = Belka(**parameters)
+        model = Belka(**parameters, mode=mode)
         if mode == 'mlm':
             loss_fn = CategoricalLoss(mask=-1, **parameters)
-            metrics = MaskedAUC(mask=-1, multi_label=False, num_labels=None, **parameters)
+            metrics = MaskedAUC(mask=-1, multi_label=False, num_labels=None, **parameters, mode=mode)
         elif mode == 'fps':
             loss_fn = BinaryLoss(**parameters)
-            metrics = MaskedAUC(mask=-1, multi_label=False, num_labels=None, **parameters)
-        else:
-            loss_fn = MultiLabelLoss(macro=True, **parameters)
-            metrics = MaskedAUC(mask=2, multi_label=True, num_labels=3, **parameters)
+            metrics = MaskedAUC(mask=-1, multi_label=False, num_labels=None, **parameters, mode=mode)
+        else:  # clf mode - binary classification
+            loss_fn = BinaryLoss(**parameters)  # Use BinaryLoss for single binary label
+            metrics = MaskedAUC(mask=-1, multi_label=False, num_labels=None, **parameters, mode=mode)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=parameters.get("lr", 1e-3))
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=5, mode="min")
@@ -61,18 +61,24 @@ def train_model(
 
     # Print summary and sample batch
     model.eval()
-    x, y_true = next(iter(train_loader))
+    batch = next(iter(train_loader))
+    # Extract tokenized SMILES as input
+    sample_input = batch['smiles']
     with torch.no_grad():
-        y_pred = model(x)
+        y_pred = model(sample_input)
     print(model)
 
     # Training loop
     for epoch in range(initial_epoch, epochs):
         model.train()
         train_loss = 0
-        for step, (x, y) in enumerate(train_loader):
+        for step, batch in enumerate(train_loader):
             if step >= steps_per_epoch:
                 break
+            # Extract inputs and targets from batch dictionary
+            x = batch['smiles']  # Use tokenized SMILES as input
+            y = batch['binds']
+
             optimizer.zero_grad()
             y_pred = model(x)
             loss = loss_fn(y_pred, y)
@@ -85,13 +91,17 @@ def train_model(
         # Validation
         model.eval()
         val_loss = 0
-        for step, (x, y) in enumerate(val_loader):
+        for step, batch in enumerate(val_loader):
             if mode == 'mlm':
                 val_steps = None
             else:
                 val_steps = validation_steps
             if val_steps and step >= val_steps:
                 break
+            # Extract inputs and targets from batch dictionary
+            x = batch['smiles']  # Use tokenized SMILES
+            y = batch['binds']
+
             with torch.no_grad():
                 y_pred = model(x)
                 loss = loss_fn(y_pred, y)

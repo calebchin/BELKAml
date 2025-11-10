@@ -1,1 +1,1 @@
-from auc import MaskedAUC
+from .auc import MaskedAUC
