@@ -37,17 +37,22 @@ jobs:
         id: auth
         uses: 'google-github-actions/auth@v2'
         with:
+          token_format: 'access_token'
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
 
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: northamerica-northeast2-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
       - name: Build and push training Docker image
         run: |
-          # Configure Docker to use gcloud as credential helper for Artifact Registry
-          gcloud auth configure-docker northamerica-northeast2-docker.pkg.dev
-
           # Build training component image
           docker build -t northamerica-northeast2-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/belka-repo/belkaml-trainer:latest \
             -f src/vertex_ai/components/training/Dockerfile .
