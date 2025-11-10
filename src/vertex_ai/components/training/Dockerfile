@@ -10,15 +10,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy pyproject.toml for dependency installation
-COPY pyproject.toml /app/
-
-# Install Python dependencies
-# We install the package in editable mode to include all dependencies
-RUN pip install --no-cache-dir -e .
-
-# Copy entire src directory after installing dependencies (for better caching)
+# Copy project files needed for installation
+COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
+
+# Install Python dependencies in editable mode
+RUN pip install --no-cache-dir -e .
 
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src:/app
