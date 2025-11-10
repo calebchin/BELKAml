@@ -45,17 +45,17 @@ jobs:
 
       - name: Build and push training Docker image
         run: |
-          # Configure Docker to use gcloud as credential helper
-          gcloud auth configure-docker gcr.io
+          # Configure Docker to use gcloud as credential helper for Artifact Registry
+          gcloud auth configure-docker northamerica-northeast2-docker.pkg.dev
 
           # Build training component image
-          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/belkaml-trainer:latest \
+          docker build -t northamerica-northeast2-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/belka-repo/belkaml-trainer:latest \
             -f src/vertex_ai/components/training/Dockerfile .
 
-          # Push to Google Container Registry
-          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/belkaml-trainer:latest
+          # Push to Artifact Registry
+          docker push northamerica-northeast2-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/belka-repo/belkaml-trainer:latest
 
-          echo "Docker image pushed to gcr.io/${{ secrets.GCP_PROJECT_ID }}/belkaml-trainer:latest"
+          echo "Docker image pushed to northamerica-northeast2-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/belka-repo/belkaml-trainer:latest"
 
       - name: Run train_pipeline_job.py to compile train pipeline
       # Run train_pipeline_job.py to compile our train pipeline into Vertex AI-formatted type yaml (compiler.Compiler())

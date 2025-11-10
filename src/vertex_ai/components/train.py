@@ -3,7 +3,7 @@ from kfp.v2.dsl import component, Input, Output, Dataset, Model, Metrics
 
 
 @component(
-    base_image="gcr.io/belkaml/belkaml-trainer:latest",
+    base_image="northamerica-northeast2-docker.pkg.dev/belkaml/belka-repo/belkaml-trainer:latest",
 )
 def train_model(
     train_data: Input[Dataset],
