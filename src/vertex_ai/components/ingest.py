@@ -7,6 +7,7 @@ from kfp.v2.dsl import component, Dataset, Output
 )
 def extract_bq_to_gcs(
     bq_project_id: str,
+    bq_project_location: str,
     bq_dataset_id: str,
     bq_table_id: str,
     raw_data: Output[Dataset],
@@ -21,6 +22,8 @@ def extract_bq_to_gcs(
     bq_project_id : str
         The Google Cloud project ID containing the BigQuery table. A BigQuery client
         will be created in this project to perform the extraction.
+    bq_project_location: str
+        The Google Cloud project location, e.g. us-central1, containing the BigQuery table.
     bq_dataset_id : str
         The dataset ID within the project that contains the BigQuery table.
     bq_table_id : str
@@ -49,7 +52,7 @@ def extract_bq_to_gcs(
     import logging
     from google.cloud import bigquery
 
-    client = bigquery.client.Client(project=bq_project_id, location="US")
+    client = bigquery.client.Client(project=bq_project_id, location=bq_project_location)
     table = bigquery.table.Table(
         table_ref=f"{bq_project_id}.{bq_dataset_id}.{bq_table_id}"
     )

@@ -50,7 +50,12 @@ def preprocess_gcs(
     else:
         raise ValueError(f"Unsupported file format: {raw_data_path.suffix}")
 
-    df = df[["molecule_smiles", "protein_smiles", "binds"]]
+    # Instead of strings in the molecule_smiles and protein_smiles columns, use an string to
+    # integer mapping.
+    # Keep the mapping file somewhere as a single source of truth and update it dynamically whenever
+    # we see a new target protein.
+    # Only need to read this mapping in the smiles to fingerprint encoder.
+    df = df[["molecule_smiles", "protein", "binds"]]
     df = df.dropna()
 
     data_path = Path(data.path)
