@@ -10,7 +10,7 @@ from kfp.v2.dsl import (
 
 
 @component(
-    base_image="python:3.10",
+    base_image="python:3.12",
     packages_to_install=["pandas", "scikit-learn", "torch", "numpy"],
 )
 def test_model(

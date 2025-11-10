@@ -3,7 +3,7 @@ from typing import Optional
 
 
 @component(
-    base_image="python:3.10",
+    base_image="python:3.12",
     packages_to_install=["pandas", "scikit-learn"],
 )
 def split_train_val_test_gcs(

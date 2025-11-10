@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "belkaml"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 description = "End-to-end application for predicting binding affinity of small molecules to protein targets with deep learning."
 version = "1.0.0"
 authors = [
@@ -21,7 +21,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -40,7 +39,7 @@ dependencies = [
     "torchmetrics",
     "dask",
     "kfp>=2.14.6",
-    "google-cloud-bigquery"
+    "google-cloud-bigquery",
     "pyyaml"
 ]
 
@@ -151,4 +150,4 @@ lint.unfixable = []
 venv = ".venv"
 venvPath = "."
 include = ["src"]
-pythonVersion = "3.10"
+pythonVersion = "3.12"
