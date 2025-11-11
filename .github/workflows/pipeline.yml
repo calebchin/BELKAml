@@ -44,9 +44,11 @@ jobs:
 
       - name: Run train_pipeline_job.py to compile train pipeline
       # Run train_pipeline_job.py to compile our train pipeline into Vertex AI-formatted type yaml (compiler.Compiler())
+        env:
+          PYTHONPATH: src
         run: |
           source .venv/bin/activate
-          python src/vertex_ai/jobs/train_pipeline_job.py
+          python -m vertex_ai.jobs.train_pipeline_job
 
       - name: Upload YAML file for Vertex AI to GCP
         run: |
