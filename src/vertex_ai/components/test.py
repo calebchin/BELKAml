@@ -10,14 +10,14 @@ from kfp.v2.dsl import (
 
 
 @component(
-    base_image="python:3.12",
-    packages_to_install=["pandas", "scikit-learn", "torch", "numpy"],
+    base_image="northamerica-northeast2-docker.pkg.dev/belkaml/belka-repo/belkaml-trainer:latest",
 )
 def test_model(
     test_data: Input[Dataset],
     model: Input[Model],
     test_metrics: Output[Metrics],
     classification_metrics: Output[ClassificationMetrics],
+    config_path: str = "gs://belkamlbucket/configs/vertex_train_config.yaml",
     batch_size: int = 1024,
     y_column: str = "binds",
 ) -> None:
@@ -38,6 +38,9 @@ def test_model(
         Metrics artifact to log scalar evaluation metrics to Vertex AI.
     classification_metrics : Output[ClassificationMetrics]
         Artifact to log ROC curve and confusion matrix for visualization in Vertex AI.
+    config_path : str, optional
+        GCS path to training config YAML containing model hyperparameters,
+        by default 'gs://belkamlbucket/configs/vertex_train_config.yaml'.
     batch_size : int, optional
         Batch size for GPU inference, by default 1024.
     y_column : str, optional
@@ -63,6 +66,36 @@ def test_model(
     )
     from pathlib import Path
     import json
+    from google.cloud import storage
+    import yaml
+    from model import Belka
+
+    # Load training config from GCS to get model hyperparameters
+    print(f"Loading model config from {config_path}")
+    config_local_path = "/tmp/vertex_train_config.yaml"
+
+    # Parse GCS path
+    config_bucket_name = config_path.replace("gs://", "").split("/")[0]
+    config_blob_name = "/".join(config_path.replace("gs://", "").split("/")[1:])
+
+    # Download config file
+    storage_client = storage.Client()
+    config_bucket = storage_client.bucket(config_bucket_name)
+    config_blob = config_bucket.blob(config_blob_name)
+    config_blob.download_to_filename(config_local_path)
+    print(f"Downloaded config to {config_local_path}")
+
+    # Load config
+    with open(config_local_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Extract model hyperparameters
+    hidden_size = config.get('hidden_size', 32)
+    num_layers = config.get('num_layers', 2)
+    vocab_size = config.get('vocab_size', 44)
+    dropout_rate = config.get('dropout_rate', 0.1)
+
+    print(f"Loaded config: hidden_size={hidden_size}, num_layers={num_layers}, vocab_size={vocab_size}, dropout_rate={dropout_rate}")
 
     test_data_path = Path(test_data.path)
     if test_data_path.suffix == ".parquet":
@@ -79,7 +112,21 @@ def test_model(
     )
     y_test = np.asarray(df[y_column].values, dtype=float)
 
-    loaded_model = torch.load(model.path, map_location=device)
+    # Instantiate model architecture using config from training
+    # Note: Always use 'clf' mode for testing, regardless of training mode
+    loaded_model = Belka(
+        hidden_size=hidden_size,
+        dropout_rate=dropout_rate,
+        mode='clf',  # Always use classification mode for testing
+        num_layers=num_layers,
+        vocab_size=vocab_size,
+    )
+
+    # Load state_dict (model weights) from checkpoint
+    state_dict = torch.load(model.path, map_location=device)
+    loaded_model.load_state_dict(state_dict)
+
+    # Move to device and set eval mode
     loaded_model.to(device)
     loaded_model.eval()
 

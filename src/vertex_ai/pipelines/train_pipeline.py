@@ -76,8 +76,8 @@ def train_pipeline(
 
     # Step 6: Deploy
     deploy_task = deploy_model_to_aip(
-        aip_project_id=aip_project_id,
-        aip_project_location=aip_project_location,
+        aipproject_id=aip_project_id,
+        aipproject_location=aip_project_location,
         model=train_task.outputs["model"],
         train_metrics=train_task.outputs["train_metrics"],
         val_metrics=train_task.outputs["val_metrics"],

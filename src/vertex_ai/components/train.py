@@ -172,7 +172,7 @@ def train_model(
 
     # Initialize loss function based on mode
     if mode == 'mlm':
-        loss_fn = CategoricalLoss(mask=-1)
+        loss_fn = CategoricalLoss(mask=-1, epsilon=epsilon, vocab_size=vocab_size) # TODO: do we need a gamma?
         metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
     elif mode == 'fps':
         loss_fn = BinaryLoss()
