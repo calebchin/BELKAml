@@ -78,7 +78,7 @@ def train_pipeline(
         aip_project_id=aip_project_id,
         aip_project_location=aip_project_location,
         model=train_task.outputs["model"],
-        train_metrics=training_task.outputs["train_metrics"],
-        val_metrics=training_task.outputs["val_metrics"],
-        test_metrics=evaluation_task.outputs["test_metrics"],
+        train_metrics=train_task.outputs["train_metrics"],
+        val_metrics=train_task.outputs["val_metrics"],
+        test_metrics=test_task.outputs["test_metrics"],
     )
