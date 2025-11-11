@@ -14,7 +14,7 @@ def train_model(
     val_metrics: Output[Metrics],
     classification_metrics: Output[ClassificationMetrics],
     batch_size: int = 1024,
-    target_column: str = "binds",
+    y_column: str = "binds",
 ) -> None:
     import torch
     import torch.nn as nn
