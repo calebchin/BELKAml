@@ -6,6 +6,7 @@ on:
       - compile_train_pipe
     paths:
       - "src/vertex_ai/**"
+      - ".github/workflows/vertex-ai-train.yml"
   workflow_dispatch:
 
 permissions:
