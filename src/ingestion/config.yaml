@@ -1,0 +1,20 @@
+gcs:
+  # The bucket to move files to after they are processed successfully
+  archive_bucket_name: "belkaml_archive_data"
+
+bigquery:
+  project: "belkaml"
+  dataset: "belka_train_dataset"
+  table: "all_data"
+
+data_preprocessing:
+  experimental_batch_num: 1
+  timezone: "UTC"
+  col_name_map:
+    molecule_id: "molecule_smiles"
+    protein_id: "protein_name"
+    bind_value: "binds"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(levelname)s - %(message)s"
