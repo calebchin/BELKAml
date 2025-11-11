@@ -10,7 +10,7 @@ args = {
     "aip_project_id": "belkaml",
     "aip_project_location": "us-central1-a",
     "stratify_column": "protein_name",
-    "y_column": "binds",
+    "target_column": "binds",
 }
 
 aip.init(project=args["aip_project_id"], location=args["aip_project_location"])
