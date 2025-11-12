@@ -36,7 +36,7 @@ def train_pipeline(
     aip_project_id: str,
     aip_project_location: str,
     stratify_column: Optional[str],
-    y_column: str,
+    target_column: str,
 ):
     # Step 1: Ingest
     ingest_task = extract_bq_to_gcs(
@@ -63,7 +63,7 @@ def train_pipeline(
         train_data=split_task.outputs["train_data"],
         val_data=split_task.outputs["val_data"],
         config_path="gs://belkamlbucket/configs/vertex_train_config.yaml",
-        y_column=y_column,
+        target_column=target_column,
     )
 
     # Step 5: Test
@@ -71,7 +71,7 @@ def train_pipeline(
         test_data=split_task.outputs["test_data"],
         model=train_task.outputs["model"],
         batch_size=1024,
-        y_column=y_column,
+        target_column=target_column,
     )
 
     # Step 6: Deploy

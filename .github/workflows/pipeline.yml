@@ -1,26 +1,78 @@
-name: Deploy Training Pipeline
+# name: Deploy Training Pipeline
+
+# on:
+#   push:
+#     branches:
+#       - compile_train_pipe
+#       - test_deploy
+#     paths:
+#       - "src/vertex_ai/**"
+#       - ".github/workflows/pipeline.yml"
+
+# permissions:
+#   contents: 'read'
+#   id-token: 'write'
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Authenticate to Google Cloud
+#         id: auth
+#         uses: 'google-github-actions/auth@v2'
+#         with:
+#           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+#       - name: Set up Cloud SDK
+#         uses: 'google-github-actions/setup-gcloud@v2'
+
+#       - name: Submit Training Pipeline build
+#         run: |
+#           gcloud builds submit . \
+#             --config=./src/vertex_ai/cloudbuild.yaml \
+#             --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}" \
+#             --suppress-logs
+
+name: Vertex AI pipeline deployment
 
 on:
   push:
     branches:
-      - compile_train_pipe
       - test_deploy
     paths:
       - "src/vertex_ai/**"
       - ".github/workflows/pipeline.yml"
+  workflow_dispatch:
 
 permissions:
   contents: 'read'
   id-token: 'write'
 
 jobs:
-  deploy:
+  compile-and-upload-pipeline:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Download code onto Github VM
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Create venv and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install google-cloud-aiplatform kfp
+
+      # Copy-paste from deploy-ingestion.yml
       - name: Authenticate to Google Cloud
         id: auth
         uses: 'google-github-actions/auth@v2'
@@ -31,9 +83,23 @@ jobs:
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: Submit Training Pipeline build
+      - name: Run train_pipeline_job.py to compile train pipeline
+      # Run train_pipeline_job.py to compile our train pipeline into Vertex AI-formatted type yaml (compiler.Compiler())
+        env:
+          PYTHONPATH: src
         run: |
-          gcloud builds submit . \
-            --config=./src/vertex_ai/cloudbuild.yaml \
-            --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}" \
-            --suppress-logs
+          source .venv/bin/activate
+          python -m vertex_ai.jobs.train_pipeline_job
+
+      - name: Upload YAML file for Vertex AI to GCP
+        run: |
+          gsutil cp train_pipeline.yaml gs://belkaml_pipeline_artifacts/train_pipeline.yaml
+
+      - name: Trigger Vertex AI pipeline run
+        run: |
+          gcloud ai pipelines run \
+            --display-name="Train pipeline run" \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --region=northamerica-northeast2 \
+            --file=gs://belkaml_pipeline_artifacts/train_pipeline.yaml \
+            --parameter-values bq_project_id=belkaml,bq_project_location=US,bq_dataset_id=belka_train_dataset,bq_table_id=all_data,aip_project_id=belkaml,aip_project_location=northamerica-northeast2,stratify_column=protein_name,y_column=binds
