@@ -20,6 +20,7 @@ steps:
     - '-c'
     - |
       pip install google-cloud-aiplatform kfp
+      export PYTHONPATH=/workspace/src:$PYTHONPATH
       cd src/vertex_ai
       python jobs/train_pipeline_job.py
 
