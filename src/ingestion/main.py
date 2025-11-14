@@ -1,23 +1,25 @@
 from .pipeline import MoleculeDataPipeline
 from google.cloud import storage
 from typing import Any
+from cloudevents.http import CloudEvent
 
 # Initialize clients globally for efficiency
 PIPELINE = MoleculeDataPipeline(config_path="config.yaml")
 STORAGE_CLIENT = storage.Client()
 
 
-def new_data_ingest_entrypoint(event: dict) -> None:
-    """Cloud Function entry point triggered by a GCS file upload.
+def new_data_ingest_entrypoint(cloud_event: CloudEvent) -> None:
+    """Cloud Function entry point triggered by a GCS file upload via Eventarc.
     Orchestrates processing, loading, and archiving of the file.
 
     Args:
-        event (dict): Event payload.
-        context (google.cloud.functions.Context): Metadata for the event.
+        cloud_event (CloudEvent): CloudEvent containing GCS object metadata.
 
     """
-    bucket_name = event["bucket"]
-    file_name = event["name"]
+    # Extract GCS event data from CloudEvent
+    event_data = cloud_event.get_data()
+    bucket_name = event_data["bucket"]
+    file_name = event_data["name"]
 
     target_folder = "uploads/"
     if not file_name.startswith(target_folder):
