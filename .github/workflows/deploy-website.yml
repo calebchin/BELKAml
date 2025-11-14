@@ -1,0 +1,39 @@
+name: Deploy Frontend to GCS
+
+on:
+  push:
+    tags:
+    - 'deploy-web-*'   # runs whenever you push a tag like deploy-web-v123
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Install deps
+      working-directory: ./website/frontend
+      run: npm install
+
+    - name: Build frontend
+      working-directory: ./website/frontend
+      run: npm run build
+
+    - name: Deploy to GCS
+      run: |
+        gsutil -m rsync -r frontend/dist gs://${{ secrets.GCS_BUCKET_WEBSITE }}
