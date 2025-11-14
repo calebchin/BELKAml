@@ -7,7 +7,7 @@ PIPELINE = MoleculeDataPipeline(config_path="config.yaml")
 STORAGE_CLIENT = storage.Client()
 
 
-def new_data_ingest_entrypoint(event: dict, context: Any) -> None:
+def new_data_ingest_entrypoint(event: dict) -> None:
     """Cloud Function entry point triggered by a GCS file upload.
     Orchestrates processing, loading, and archiving of the file.
 
