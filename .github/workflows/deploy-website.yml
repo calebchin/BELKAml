@@ -36,4 +36,4 @@ jobs:
 
     - name: Deploy to GCS
       run: |
-        gsutil -m rsync -r frontend/dist gs://${{ secrets.GCS_BUCKET_WEBSITE }}
+        gsutil -m rsync -r ./website/frontend/dist gs://${{ secrets.GCS_BUCKET_WEBSITE }}
