@@ -170,126 +170,168 @@ def train_model(
 
     belka_model = Belka(**model_params).to(device)
 
-    # Initialize loss function based on mode
-    if mode == 'mlm':
-        loss_fn = CategoricalLoss(mask=-1, epsilon=epsilon, vocab_size=vocab_size) # TODO: do we need a gamma?
-        metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
-    elif mode == 'fps':
-        loss_fn = BinaryLoss()
-        metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
-    else:  # clf mode - binary classification
-        loss_fn = BinaryLoss()
-        metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
+    # Sequentially train all modes
+    training_order = ["mlm", "fps", "clf"]
+    best_val_loss_overall = {}
+    best_checkpoint_overall = {}
 
-    # --- 5. Setup optimizer and scheduler ---
-    optimizer = torch.optim.Adam(belka_model.parameters(), lr=lr, eps=epsilon)
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, factor=0.5, patience=5, mode="min"
-    )
+    # Store the final losses per training mode
+    final_train_loss = 0
+    final_val_loss = 0
+    total_epochs_trained = 0
 
     # --- 6. Checkpointing function ---
     checkpoint_dir = Path(model.path)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_checkpoint(epoch, val_loss):
+    def save_checkpoint(mode, epoch, val_loss):
         """Save model checkpoint to GCS artifact directory"""
-        checkpoint_name = f"{model_name}_{epoch:03d}_{val_loss:.4f}.pt"
+        checkpoint_name = f"{model_name}_{mode}_{epoch:03d}_{val_loss:.4f}.pt"
         checkpoint_path = checkpoint_dir / checkpoint_name
         torch.save(belka_model.state_dict(), checkpoint_path)
         print(f"Saved checkpoint: {checkpoint_path}")
         return checkpoint_path
 
-    # --- 7. Training loop ---
-    print("\nStarting training...")
-    print(f"Model architecture:\n{belka_model}")
+    for mode in training_order:
 
-    best_val_loss = float("inf")
-    epochs_no_improve = 0
-    best_checkpoint_path = None
+        # --- 7. Training loop ---
+        print(f"\nStarting training...")
+        print(f"Model architecture:\n{belka_model}")
 
-    for epoch in range(initial_epoch, epochs):
-        # Training phase
-        belka_model.train()
-        train_loss = 0
+        print("-" * 20)
+        print(f"Training in mode = {mode}")
+        print("-" * 20)
 
-        for step, batch in enumerate(train_loader):
-            if step >= steps_per_epoch:
-                break
+        # Switch model mode (assumes Belka.switch_mode handles heads correctly)
+        belka_model.switch_mode(mode)
+        print(f"Model switched to {mode} mode.")
 
-            # Extract inputs and targets from batch dictionary
-            x = batch['smiles'].to(device)
-            y = batch['binds'].to(device)
+        # Initialize loss function based on mode
+        if mode == "mlm":
+            loss_fn = CategoricalLoss(mask=-1, epsilon=epsilon, vocab_size=vocab_size)
+            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
+        elif mode == "fps":
+            loss_fn = BinaryLoss()
+            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
+        else: # clf mode - binary classification
+            loss_fn = BinaryLoss()
+            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
 
-            # Forward pass
-            optimizer.zero_grad()
-            y_pred = belka_model(x)
-            loss = loss_fn(y_pred, y)
+        # New optimizer & scheduler for each phase (keeps weights, resets LR state)
+        optimizer = torch.optim.Adam(belka_model.parameters(), lr=lr, eps=epsilon)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=5, mode="min")
 
-            # Backward pass
-            loss.backward()
-            optimizer.step()
+        best_val_loss = float("inf")
+        epochs_no_improve = 0
+        best_checkpoint_path = None
 
-            train_loss += loss.item()
+        for epoch in range(initial_epoch, epochs):
+            # Training phase
+            belka_model.train()
+            train_loss = 0
 
-        train_loss /= steps_per_epoch
-
-        # Validation phase
-        belka_model.eval()
-        val_loss = 0
-
-        with torch.no_grad():
-            for step, batch in enumerate(val_loader):
-                if validation_steps and step >= validation_steps:
+            for step, batch in enumerate(train_loader):
+                if step >= steps_per_epoch:
                     break
 
-                # Extract inputs and targets
+                # Extract inputs and targets from batch dictionary
                 x = batch['smiles'].to(device)
                 y = batch['binds'].to(device)
 
                 # Forward pass
+                optimizer.zero_grad()
                 y_pred = belka_model(x)
                 loss = loss_fn(y_pred, y)
-                val_loss += loss.item()
 
-        val_loss /= (validation_steps if validation_steps else len(val_loader))
+                # Backward pass
+                loss.backward()
+                optimizer.step()
 
-        # Update learning rate scheduler
-        lr_scheduler.step(val_loss)
-        current_lr = optimizer.param_groups[0]['lr']
+                train_loss += loss.item()
 
-        print(f"Epoch {epoch + 1}/{epochs} - "
-              f"train_loss: {train_loss:.4f} - "
-              f"val_loss: {val_loss:.4f} - "
-              f"lr: {current_lr:.6f}")
+            train_loss /= steps_per_epoch
 
-        # Save checkpoint
-        checkpoint_path = save_checkpoint(epoch, val_loss)
+            # Validation phase
+            belka_model.eval()
+            val_loss = 0
 
-        # Early stopping
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_checkpoint_path = checkpoint_path
-            epochs_no_improve = 0
-        else:
-            epochs_no_improve += 1
-            if epochs_no_improve >= patience:
-                print(f"Early stopping at epoch {epoch + 1}")
-                break
+            with torch.no_grad():
+                for step, batch in enumerate(val_loader):
+                    if validation_steps and step >= validation_steps:
+                        break
 
-    # --- 8. Save final model and metrics ---
-    print(f"\nTraining completed. Best validation loss: {best_val_loss:.4f}")
+                    # Extract inputs and targets
+                    x = batch['smiles'].to(device)
+                    y = batch['binds'].to(device)
 
-    # Copy best checkpoint to main model output path
+                    # Forward pass
+                    y_pred = belka_model(x)
+                    loss = loss_fn(y_pred, y)
+                    val_loss += loss.item()
+
+            val_loss /= (validation_steps if validation_steps else len(val_loader))
+
+            # Update learning rate scheduler
+            lr_scheduler.step(val_loss)
+            current_lr = optimizer.param_groups[0]['lr']
+
+            print(f"Epoch {epoch + 1}/{epochs} - "
+                f"train_loss: {train_loss:.4f} - "
+                f"val_loss: {val_loss:.4f} - "
+                f"lr: {current_lr:.6f}")
+
+            # Save checkpoint
+            checkpoint_path = save_checkpoint(mode, epoch, val_loss)
+
+            # Early stopping
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_checkpoint_path = checkpoint_path
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= patience:
+                    print(f"Early stopping at epoch {epoch + 1}")
+                    break
+            
+            total_epochs_trained += 1
+            final_train_loss = train_loss
+            final_val_loss = val_loss
+        
+        print(f"[{mode}] training completed. Best val_loss: {best_val_loss:.4f}")
+
+        # --- 8. Save final model and metrics ---
+        print(f"\nTraining completed. Best validation loss: {best_val_loss:.4f}")
+        best_val_loss_overall[mode] = best_val_loss
+        best_checkpoint_overall[mode] = best_checkpoint_path
+
+
+        # Load the best checkpoint to use for the next training mode
+        if best_checkpoint_path:
+            print(f"[{mode}] Loading best checkpoint {best_checkpoint_path} for next phase")
+            state_dict = torch.load(best_checkpoint_path, map_location=device)
+            belka_model.load_state_dict(state_dict)
+
+
+    # Copy best checkpoint to main model output path after all modes have been trained
     if best_checkpoint_path:
         final_model_path = checkpoint_dir / "model.pt"
         import shutil
         shutil.copy(best_checkpoint_path, final_model_path)
         print(f"Best model saved to {final_model_path}")
 
-    # Log metrics to KFP outputs
-    train_metrics.log_metric("final_train_loss", train_loss)
-    val_metrics.log_metric("final_val_loss", val_loss)
-    val_metrics.log_metric("best_val_loss", best_val_loss)
-    val_metrics.log_metric("epochs_trained", epoch - initial_epoch + 1)
+    # --- 8. Log metrics to KFP outputs ---
+    # Log final (clf) phase losses
+    if final_train_loss is not None:
+        train_metrics.log_metric("final_train_loss", final_train_loss)
+    if final_val_loss is not None:
+        val_metrics.log_metric("final_val_loss", final_val_loss)
+
+    # Log best per mode validation loss
+    for m in training_order:
+        if m in best_val_loss_overall:
+            val_metrics.log_metric(f"best_val_loss_{m}", best_val_loss_overall[m])
+
+    val_metrics.log_metric("total_epochs_trained", total_epochs_trained)
 
     print("Training component completed successfully!")
