@@ -17,7 +17,7 @@ def new_data_ingest_entrypoint(cloud_event: CloudEvent) -> None:
 
     """
     # Extract GCS event data from CloudEvent
-    event_data = cloud_event.get_data()
+    event_data = cloud_event.data
     bucket_name = event_data["bucket"]
     file_name = event_data["name"]
 
