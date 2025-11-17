@@ -75,7 +75,7 @@ class MoleculeDataPipeline:
 
         stamped_time = pd.Timestamp.now(tz=tz)
         self.logger.info(f"Timestamp for ingestion: {stamped_time}")
-        processed_df["timestamp"] = stamped_time
+        processed_df["time_ingested"] = stamped_time
 
         self.logger.info("Processed new data successfully.")
         return processed_df
