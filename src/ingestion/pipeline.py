@@ -78,7 +78,7 @@ class MoleculeDataPipeline:
         processed_df["timestamp"] = stamped_time
 
         self.logger.info("Processed new data successfully.")
-        return new_df
+        return processed_df
 
     def load_to_bigquery(self, df: pd.DataFrame) -> None:
         """Loads and appends DataFrame df to Bigquery Table"""

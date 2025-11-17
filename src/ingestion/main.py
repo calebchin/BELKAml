@@ -41,6 +41,15 @@ def new_data_ingest_entrypoint(request: Request) -> None:
         )
         return
 
+    # Check if file still exists before processing (handles duplicate events)
+    source_bucket = STORAGE_CLIENT.bucket(bucket_name)
+    source_blob = source_bucket.blob(file_name)
+    if not source_blob.exists():
+        PIPELINE.logger.info(
+            f"File '{file_name}' does not exist in bucket '{bucket_name}'. "
+        )
+        return
+
     try:
         # Process and load data
         processed_df = PIPELINE.process_data(bucket_name, file_name)
