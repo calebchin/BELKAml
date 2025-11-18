@@ -10,10 +10,15 @@ bigquery:
 data_preprocessing:
   experimental_batch_num: 1
   timezone: "UTC"
-  col_name_map:
-    molecule_id: "molecule_smiles"
-    protein_id: "protein_name"
-    bind_value: "binds"
+  # col_name_map:
+  #   molecule_id: "molecule_smiles"
+  #   protein_id: "protein_name"
+  #   bind_value: "binds"
+  schema_cols:
+    - "molecule_smiles"
+    - "protein_name"
+    - "binds"
+
 
 logging:
   level: "INFO"

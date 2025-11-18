@@ -16,6 +16,7 @@ steps:
 # Step 3: Install Python dependencies and compile pipeline YAML
 - name: 'python:3.12'
   entrypoint: 'bash'
+  env: ['PYTHONPATH=/workspace/src']
   args:
     - '-c'
     - |

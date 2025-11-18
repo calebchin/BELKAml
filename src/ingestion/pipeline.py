@@ -56,7 +56,7 @@ class MoleculeDataPipeline:
         # schema cols as a list
         schema_cols = self.config["data_preprocessing"]["schema_cols"]
         # col_name_map should be a dict mapping col names in csv to schema col names
-        col_name_map = self.config["data_preprocessing"]["col_name_map"]
+        #col_name_map = self.config["data_preprocessing"]["col_name_map"]
         # experimental batch num
         experimental_batch_num = self.config["data_preprocessing"][
             "experimental_batch_num"
@@ -64,21 +64,21 @@ class MoleculeDataPipeline:
         # tz info
         tz = self.config["data_preprocessing"]["timezone"]
 
-        col_orig = col_name_map.keys()
-        col_schema = col_name_map.values()
-        processed_df = new_df.loc[:, col_orig].rename(columns=col_schema)
-        self.logger.info(f"Renamed columns: {col_schema}")
-        processed_df = processed_df[schema_cols]
+        # col_orig = col_name_map.keys()
+        # col_schema = col_name_map.values()
+        # processed_df = new_df.loc[:, col_orig].rename(columns=col_schema)
+        # self.logger.info(f"Renamed columns: {col_schema}")
+        processed_df = new_df[schema_cols]
 
         processed_df["experimental_batch"] = experimental_batch_num
         self.logger.info(f"Ingested data has batch number: {experimental_batch_num}")
 
         stamped_time = pd.Timestamp.now(tz=tz)
         self.logger.info(f"Timestamp for ingestion: {stamped_time}")
-        processed_df["timestamp"] = stamped_time
+        processed_df["time_ingested"] = stamped_time
 
         self.logger.info("Processed new data successfully.")
-        return new_df
+        return processed_df
 
     def load_to_bigquery(self, df: pd.DataFrame) -> None:
         """Loads and appends DataFrame df to Bigquery Table"""

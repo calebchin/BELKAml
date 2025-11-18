@@ -19,7 +19,7 @@ def test_model(
     classification_metrics: Output[ClassificationMetrics],
     config_path: str = "gs://belkamlbucket/configs/vertex_train_config.yaml",
     batch_size: int = 1024,
-    y_column: str = "binds",
+    target_column: str = "binds",
 ) -> None:
     """
     Evaluate a PyTorch binary classification model on held-out test data.
@@ -107,10 +107,10 @@ def test_model(
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    X_test = torch.tensor(df.drop(columns=[y_column]).values, dtype=torch.float32).to(
+    X_test = torch.tensor(df.drop(columns=[target_column]).values, dtype=torch.float32).to(
         device
     )
-    y_test = np.asarray(df[y_column].values, dtype=float)
+    y_test = np.asarray(df[target_column].values, dtype=float)
 
     # Instantiate model architecture using config from training
     # Note: Always use 'clf' mode for testing, regardless of training mode

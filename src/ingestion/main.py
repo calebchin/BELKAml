@@ -1,23 +1,25 @@
 from .pipeline import MoleculeDataPipeline
 from google.cloud import storage
 from typing import Any
+from flask import Request
 
 # Initialize clients globally for efficiency
 PIPELINE = MoleculeDataPipeline(config_path="config.yaml")
 STORAGE_CLIENT = storage.Client()
 
 
-def new_data_ingest_entrypoint(event: dict, context: Any) -> None:
-    """Cloud Function entry point triggered by a GCS file upload.
+def new_data_ingest_entrypoint(request: Request) -> None:
+    """Cloud Function entry point triggered by a GCS file upload via Eventarc.
     Orchestrates processing, loading, and archiving of the file.
 
     Args:
-        event (dict): Event payload.
-        context (google.cloud.functions.Context): Metadata for the event.
+        request (Request): Flask Request containing CloudEvent as JSON in the body.
 
     """
-    bucket_name = event["bucket"]
-    file_name = event["name"]
+    # Extract GCS event data from CloudEvent sent as HTTP POST JSON
+    event = request.get_json()
+    bucket_name = event.get("bucket")
+    file_name = event.get("name")
 
     target_folder = "uploads/"
     if not file_name.startswith(target_folder):
@@ -36,6 +38,15 @@ def new_data_ingest_entrypoint(event: dict, context: Any) -> None:
     if bucket_name == archive_bucket_name:
         PIPELINE.logger.info(
             f"File '{file_name}' is in the archive bucket. No processing needed."
+        )
+        return
+
+    # Check if file still exists before processing (handles duplicate events)
+    source_bucket = STORAGE_CLIENT.bucket(bucket_name)
+    source_blob = source_bucket.blob(file_name)
+    if not source_blob.exists():
+        PIPELINE.logger.info(
+            f"File '{file_name}' does not exist in bucket '{bucket_name}'. "
         )
         return
 
