@@ -1,0 +1,37 @@
+name: Deploy Ingestion Component
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+       - 'src/ingestion/**'
+       - '.github/workflows/deploy-ingestion.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout code
+      uses: 'actions/checkout@v4'
+
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: 'Submit Ingestion build'
+      run: |
+        gcloud builds submit ./src/ingestion \
+          --config=./src/ingestion/cloudbuild.yaml \
+          --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}" \
+          --suppress-logs

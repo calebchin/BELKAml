@@ -16,6 +16,7 @@ class Belka(nn.Module):
         mode: str,
         num_layers: int,
         vocab_size: int,
+        **kwargs: dict
     ):
         super(Belka, self).__init__()
 
@@ -45,20 +46,32 @@ class Belka(nn.Module):
             ]
         )
 
-        if mode == "mlm":
-            self.head = nn.Linear(hidden_size, vocab_size)
-        else:
-            if mode == "clf":
-                output_units = 3
-            else:  # fps mode
-                output_units = 2048
+        self.mlm_head = nn.Linear(hidden_size, vocab_size)
 
-            self.head = nn.Sequential(
-                nn.AdaptiveAvgPool1d(1),  # Global average pooling
-                nn.Dropout(dropout_rate),
-                nn.Linear(hidden_size, output_units),
-                nn.Sigmoid(),
-            )
+        if mode == "clf":
+            output_units = 1  # Binary classification (single output)
+        else:  # fps mode
+            output_units = 2048
+        
+        
+        self.fps_head = nn.Sequential(
+            nn.Dropout(dropout_rate),
+            nn.Linear(32, 2048),
+            nn.Sigmoid())
+        
+        self.pool = nn.AdaptiveAvgPool1d(1)  # Global average pooling
+
+        self.clf_head = nn.Sequential(
+            nn.Dropout(dropout_rate),
+            nn.Linear(32, output_units),  # Use depth=32 from encoder
+            nn.Sigmoid(),
+        )
+
+    def switch_mode(self, mode: str):
+        # Switch head for sequential training
+        if mode not in {"mlm", "fps", "clf"}:
+            raise ValueError(f"Invalid mode: {mode}")
+        self.mode = mode
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """Forward pass of main Belka arch"""
@@ -68,13 +81,19 @@ class Belka(nn.Module):
             x = encoder(x, key_padding_mask)
 
         if self.mode == "mlm":
-            x = self.head(x)
+            x = self.mlm_head(x)
             x = f.softmax(x, dim=-1)
         else:
-            # For non-MLM modes, we need to handle the global pooling differently
-            # PyTorch's AdaptiveAvgPool1d expects (batch, channels, length)
-            x = x.transpose(1, 2)  # (batch, hidden, seq_len)
-            x = self.head(x)
-            x = x.squeeze(-1)  # Remove the pooled dimension
+            # For non-MLM modes: pool over sequence, then classify
+            # x shape: (batch, seq_len, depth)
+            x = x.transpose(1, 2)  # (batch, depth, seq_len)
+            x = self.pool(x)  # (batch, depth, 1)
+            x = x.squeeze(-1)  # (batch, depth)
+            if self.mode == "fps":
+                x = self.fps_head(x)
+            elif self.mode == "clf":
+                x = self.clf_head(x)
+            else:
+                raise ValueError(f"Invalid model model {self.mode} provided")
 
         return x

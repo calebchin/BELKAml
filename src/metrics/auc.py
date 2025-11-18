@@ -13,6 +13,7 @@ class MaskedAUC(nn.Module):
         multi_label: bool,
         num_labels: int = None or 1,
         vocab_size: int = None or 1,
+        **kwargs: dict
     ):
         super().__init__()
         self.mode = mode

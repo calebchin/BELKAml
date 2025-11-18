@@ -1,0 +1,38 @@
+# Training Configuration for BELKA Model
+# Minimal settings for quick testing
+
+# Training Parameters
+mode: "clf"  # Options: 'mlm', 'fps', 'clf'
+epochs: 5
+initial_epoch: 0
+steps_per_epoch: 50  # Small for quick testing
+validation_steps: 20
+patience: 3  # Early stopping patience
+
+# Model Parameters
+model: null  # Path to checkpoint, or null for new model
+model_name: "belka_clf"
+hidden_size: 32
+num_layers: 2
+vocab_size: 44  # Vocabulary size: 41 from vocab.txt + 3 special tokens ([PAD], [MASK], [UNK])
+dropout_rate: 0.1
+
+# Data Parameters
+batch_size: 16
+buffer_size: 10000
+masking_rate: 0.15
+max_length: 128
+seed: 42
+num_workers: 2
+val_split: 0.1  # 10% validation split
+
+# Optimizer Parameters
+lr: 0.001  # Learning rate
+epsilon: 1e-7
+
+# Paths
+working: "testing_data"  # Directory containing belka.parquet
+root: "testing_data"  # Root data directory
+
+# Loss Parameters
+macro: true  # For multi-label loss (not used in binary clf)

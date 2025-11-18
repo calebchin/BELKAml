@@ -1,0 +1,38 @@
+name: Deploy Training Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/vertex_ai/**"
+      - ".github/workflows/pipeline.yml"
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: Submit Training Pipeline build
+        run: |
+          gcloud builds submit . \
+            --config=./src/vertex_ai/cloudbuild.yaml \
+            --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}" \
+            --suppress-logs
