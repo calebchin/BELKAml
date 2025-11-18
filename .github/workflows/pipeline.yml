@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - test_deploy
     paths:
       - "src/vertex_ai/**"
       - ".github/workflows/pipeline.yml"

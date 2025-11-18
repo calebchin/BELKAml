@@ -50,5 +50,5 @@ substitutions:
   _PROJECT_ID: 'required'
   _COMMIT_SHA: 'latest'
 
-options:
-  logging: CLOUD_LOGGING_ONLY
+# options:
+#   logging: CLOUD_LOGGING_ONLY
