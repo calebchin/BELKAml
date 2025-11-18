@@ -3,8 +3,7 @@ name: Deploy Training Pipeline
 on:
   push:
     branches:
-      - compile_train_pipe
-      - test_deploy
+      - main
     paths:
       - "src/vertex_ai/**"
       - ".github/workflows/pipeline.yml"
