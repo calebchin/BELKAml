@@ -42,13 +42,13 @@ steps:
 #     '--parameter-values', 'bq_project_id=belkaml,bq_project_location=US,bq_dataset_id=belka_train_dataset,bq_table_id=all_data,aip_project_id=belkaml,aip_project_location=northamerica-northeast2,stratify_column=protein_name,y_column=binds'
 #   ]
 
-# images:
-# - 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:${_COMMIT_SHA}'
-# - 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:latest'
+images:
+- 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:${_COMMIT_SHA}'
+- 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:latest'
 
-# substitutions:
-#   _PROJECT_ID: 'required'
-#   _COMMIT_SHA: 'latest'
+substitutions:
+  _PROJECT_ID: 'required'
+  _COMMIT_SHA: 'latest'
 
 # options:
 #   logging: CLOUD_LOGGING_ONLY
