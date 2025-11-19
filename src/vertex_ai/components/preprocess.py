@@ -14,7 +14,7 @@ from kfp.v2.dsl import component, Input, Output, Dataset
 # KFP component in Vertex AI Endpoints.)
 
 
-@component(base_image="python:3.12", packages_to_install=["pandas"])
+@component(base_image="python:3.12", packages_to_install=["pandas", "pyarrow"])
 def preprocess_gcs(
     raw_data: Input[Dataset],
     data: Output[Dataset],
