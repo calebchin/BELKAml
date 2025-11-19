@@ -46,9 +46,9 @@ steps:
 # - 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:${_COMMIT_SHA}'
 # - 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:latest'
 
-substitutions:
-  _PROJECT_ID: 'required'
-  _COMMIT_SHA: 'latest'
+# substitutions:
+#   _PROJECT_ID: 'required'
+#   _COMMIT_SHA: 'latest'
 
 # options:
 #   logging: CLOUD_LOGGING_ONLY
