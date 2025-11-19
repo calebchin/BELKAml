@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - test_deploy
     paths:
        - 'src/ingestion/**'
        - '.github/workflows/deploy-ingestion.yml'
