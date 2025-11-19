@@ -43,7 +43,11 @@ def preprocess_gcs(
 
     raw_data_path = Path(raw_data.path)
 
-    if raw_data_path.suffix == ".parquet":
+    # Handle both single file and directory of sharded files
+    if raw_data_path.is_dir():
+        # Read all Parquet files in directory (from sharded BQ export)
+        df = pd.read_parquet(raw_data_path)
+    elif raw_data_path.suffix == ".parquet":
         df = pd.read_parquet(raw_data_path)
     elif raw_data_path.suffix == ".csv":
         df = pd.read_csv(raw_data_path)

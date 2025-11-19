@@ -58,16 +58,18 @@ def extract_bq_to_gcs(
     )
 
     job_config = bigquery.job.ExtractJobConfig(destination_format="PARQUET")
+    # Use wildcard to shard output into multiple files for large tables
+    destination_uri = raw_data.uri.rstrip('/') + "/data-*.parquet"
     extract_job = client.extract_table(
         table,
-        raw_data.uri,
+        destination_uri,
         job_config=job_config,
     )
 
     try:
         extract_job.result()
         logging.info(f"BQ table extracted to GCS at {raw_data.uri}")
-    except GoogleCloudError as e:
+    except Exception as e:
         logging.error(e)
         logging.error(extract_job.error_result)
         logging.error(extract_job.errors)
