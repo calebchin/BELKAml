@@ -3,7 +3,7 @@ from kfp.v2.dsl import component, Dataset, Output
 
 @component(
     base_image="python:3.12",
-    packages_to_install=["google-cloud-bigquery==2.3.1"],
+    packages_to_install=["google-cloud-bigquery==3.38.0"],
 )
 def extract_bq_to_gcs(
     bq_project_id: str,

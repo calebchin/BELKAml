@@ -1,17 +1,17 @@
 steps:
-# Step 1: Build training component Docker image
-- name: 'gcr.io/cloud-builders/docker'
-  args: [
-    'build',
-    '-t', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:${_COMMIT_SHA}',
-    '-t', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:latest',
-    '-f', 'src/vertex_ai/components/training/Dockerfile',
-    '.'
-  ]
+# # Step 1: Build training component Docker image
+# - name: 'gcr.io/cloud-builders/docker'
+#   args: [
+#     'build',
+#     '-t', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:${_COMMIT_SHA}',
+#     '-t', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:latest',
+#     '-f', 'src/vertex_ai/components/training/Dockerfile',
+#     '.'
+#   ]
 
-# Step 2: Push training component image to Artifact Registry
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', '--all-tags', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer']
+# # Step 2: Push training component image to Artifact Registry
+# - name: 'gcr.io/cloud-builders/docker'
+#   args: ['push', '--all-tags', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer']
 
 # Step 3: Install Python dependencies and compile pipeline YAML
 - name: 'python:3.12'
