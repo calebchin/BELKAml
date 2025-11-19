@@ -4,7 +4,7 @@ from typing import Optional
 
 @component(
     base_image="python:3.12",
-    packages_to_install=["pandas", "scikit-learn"],
+    packages_to_install=["pandas", "scikit-learn", "pyarrow"],
 )
 def split_train_val_test_gcs(
     data: Input[Dataset],
@@ -54,10 +54,16 @@ def split_train_val_test_gcs(
     import logging
 
     data_path = Path(data.path)
-    if data_path.suffix == ".parquet":
+    if data_path.is_dir():
+        # Read all Parquet files in directory (from sharded BQ export)
         df = pd.read_parquet(data_path)
+        output_format = "parquet"
+    elif data_path.suffix == ".parquet":
+        df = pd.read_parquet(data_path)
+        output_format = "parquet"
     elif data_path.suffix == ".csv":
         df = pd.read_csv(data_path)
+        output_format = "csv"
     else:
         raise ValueError(f"Unsupported file format: {data_path.suffix}")
 
@@ -100,7 +106,7 @@ def split_train_val_test_gcs(
         split_path = Path(split_data.path)
         split_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if data_path.suffix == ".parquet":
+        if output_format == "parquet":
             split_df.to_parquet(split_path, index=False)
         else:
             split_df.to_csv(split_path, index=False)

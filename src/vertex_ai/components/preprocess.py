@@ -47,10 +47,13 @@ def preprocess_gcs(
     if raw_data_path.is_dir():
         # Read all Parquet files in directory (from sharded BQ export)
         df = pd.read_parquet(raw_data_path)
+        output_format = "parquet"
     elif raw_data_path.suffix == ".parquet":
         df = pd.read_parquet(raw_data_path)
+        output_format = "parquet"
     elif raw_data_path.suffix == ".csv":
         df = pd.read_csv(raw_data_path)
+        output_format = "csv"
     else:
         raise ValueError(f"Unsupported file format: {raw_data_path.suffix}")
 
@@ -59,13 +62,13 @@ def preprocess_gcs(
     # Keep the mapping file somewhere as a single source of truth and update it dynamically whenever
     # we see a new target protein.
     # Only need to read this mapping in the smiles to fingerprint encoder.
-    df = df[["molecule_smiles", "protein", "binds"]]
+    df = df[["molecule_smiles", "protein_name", "binds"]]
     df = df.dropna()
 
     data_path = Path(data.path)
     data_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if raw_data_path.suffix == ".parquet":
+    if output_format == "parquet":
         df.to_parquet(data_path, index=False)
     else:
         df.to_csv(data_path, index=False)
