@@ -103,12 +103,14 @@ def split_train_val_test_gcs(
         outputs = [train_data, val_data, test_data]
 
     for split_df, split_data in zip(splits, outputs):
-        split_path = Path(split_data.path)
-        split_path.parent.mkdir(parents=True, exist_ok=True)
+        split_dir = Path(split_data.path)
+        split_dir.mkdir(parents=True, exist_ok=True)
 
         if output_format == "parquet":
-            split_df.to_parquet(split_path, index=False)
+            file_path = split_dir / "data.parquet"
+            split_df.to_parquet(file_path, index=False)
         else:
-            split_df.to_csv(split_path, index=False)
+            file_path = split_dir / "data.csv"
+            split_df.to_csv(file_path, index=False)
 
-        logging.info(f"Dataset saved to GCS at {split_path} ({len(split_df)} rows)")
+        logging.info(f"Dataset saved to GCS at {file_path} ({len(split_df)} rows)")

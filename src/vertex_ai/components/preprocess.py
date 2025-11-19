@@ -65,12 +65,14 @@ def preprocess_gcs(
     df = df[["molecule_smiles", "protein_name", "binds"]]
     df = df.dropna()
 
-    data_path = Path(data.path)
-    data_path.parent.mkdir(parents=True, exist_ok=True)
+    data_dir = Path(data.path)
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     if output_format == "parquet":
-        df.to_parquet(data_path, index=False)
+        file_path = data_dir / "data.parquet"
+        df.to_parquet(file_path, index=False)
     else:
-        df.to_csv(data_path, index=False)
+        file_path = data_dir / "data.csv"
+        df.to_csv(file_path, index=False)
 
-    logging.info(f"Dataset saved to GCS at {data_path}")
+    logging.info(f"Dataset saved to GCS at {file_path}")
