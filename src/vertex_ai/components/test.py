@@ -181,7 +181,8 @@ def test_model(
     )
 
     # log confusion matrix
-    tn, fp, fn, tp = confusion_matrix(y_test, y_test_pred).ravel()
+    # Specify labels to ensure 2x2 matrix even if one class is missing
+    tn, fp, fn, tp = confusion_matrix(y_test, y_test_pred, labels=[0, 1]).ravel()
     classification_metrics.log_confusion_matrix(
         categories=["non-binder", "binder"],
         matrix=[[int(tn), int(fp)], [int(fn), int(tp)]],
