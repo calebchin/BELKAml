@@ -85,7 +85,7 @@ def train_model(
     vocab_size = config.get('vocab_size', 44)
     dropout_rate = config.get('dropout_rate', 0.1)
     lr = config.get('lr', 0.001)
-    epsilon = config.get('epsilon', 1e-7)
+    epsilon = float(config.get('epsilon', 1e-7))
     vocab_gcs_path = config.get('vocab_path', 'gs://belkamlbucket/data/raw/vocab.txt')
 
     print(f"Loaded config: mode={mode}, epochs={epochs}, batch_size={batch_size}")
