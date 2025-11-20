@@ -50,8 +50,8 @@ def preprocess_gcs(
     from pathlib import Path
     from typing import List
     import atomInSmiles
-    from utils.smiles_tokenizer import SMILESTokenizer
-    from utils.ecfp import ECFPFingerprint
+    from utils.torch_data_utils import SMILESTokenizer
+    from utils.torch_data_utils import ECFPFingerprint
     from google.cloud import storage
 
     # Download vocab file from GCS if needed
