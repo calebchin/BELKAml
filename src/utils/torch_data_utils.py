@@ -165,7 +165,7 @@ class BelkaDataset(Dataset):
     """
 
     def __init__(self, parquet_path: str, subset: str = "train", val_split: float = 0.1, seed: int = 42,
-                 vocab_path: str = None, max_length: int = 128):
+                 vocab_path: str = None, max_length: int = 128, mode: str = "clf"):
         """Initialize BelkaDataset.
 
         Args:
@@ -175,6 +175,7 @@ class BelkaDataset(Dataset):
             seed: Random seed for reproducibility
             vocab_path: Path to vocabulary file
             max_length: Maximum sequence length for tokenization
+            mode: Training mode - 'mlm', 'fps', or 'clf' (default: 'clf')
 
         """
         # Read full parquet file
@@ -200,51 +201,91 @@ class BelkaDataset(Dataset):
         else:
             raise ValueError(f"subset must be 'train' or 'val', got {subset}")
 
-        # Initialize tokenizer if vocab provided
+        # Store training mode
+        self.mode = mode
         self.max_length = max_length
+
+        # Initialize tokenizer if vocab provided (for vocab_size in MLM masking)
         if vocab_path:
             self.tokenizer = SMILESTokenizer(vocab_path)
+            self.vocab_size = len(self.tokenizer.token_to_id)
         else:
             self.tokenizer = None
-
-        # Initialize ECFP transformer
-        self.ecfp_transformer = ECFPFingerprint(fp_size=2048)  # type: ignore
+            self.vocab_size = None
 
     def __len__(self):
         return len(self.data)
 
+    def _apply_mlm_masking(self, token_ids: torch.Tensor, mask_prob: float = 0.15) -> tuple:
+        """Apply BERT-style random masking for MLM training.
+
+        Args:
+            token_ids: Token IDs tensor of shape (seq_len,)
+            mask_prob: Probability of masking each token (default: 0.15)
+
+        Returns:
+            masked_ids: Token IDs with masking applied
+            targets: Shape (seq_len, 2) where [:, 0] = positions to predict, [:, 1] = original tokens
+        """
+        seq_len = token_ids.shape[0]
+
+        # Create mask: 1 where we will mask, 0 otherwise
+        # Don't mask [PAD] tokens (id=0) or special tokens
+        mask = (torch.rand(seq_len) < mask_prob) & (token_ids > 2)  # Skip [PAD], [MASK], [UNK]
+
+        # Create targets (seq_len, 2)
+        targets = torch.zeros((seq_len, 2), dtype=torch.long)
+        targets[:, 0] = -1  # Initialize all as "not masked"
+        targets[:, 1] = token_ids  # Original tokens for frequency weighting
+
+        # For masked positions: set target to original token
+        targets[mask, 0] = token_ids[mask]
+
+        # Create masked input
+        masked_ids = token_ids.clone()
+
+        if mask.sum() > 0:
+            # 80% → [MASK], 10% → random, 10% → keep original
+            mask_type = torch.rand(mask.sum().item())
+            mask_positions = torch.where(mask)[0]
+
+            # 80% [MASK] (token ID = 1)
+            mask_mask = mask_positions[mask_type < 0.8]
+            masked_ids[mask_mask] = 1
+
+            # 10% random token (avoid special tokens 0, 1, 2)
+            random_mask = mask_positions[(mask_type >= 0.8) & (mask_type < 0.9)]
+            if len(random_mask) > 0 and self.vocab_size:
+                masked_ids[random_mask] = torch.randint(3, self.vocab_size, (len(random_mask),))
+
+            # 10% keep original (already set)
+
+        return masked_ids, targets
+
     def __getitem__(self, idx: int) -> Dict:
         row = self.data.iloc[idx]
 
-        smiles = row["molecule_smiles"]
+        # Load pre-computed features from preprocessing
+        token_ids = torch.tensor(row["token_ids"], dtype=torch.long)
+        ecfp = torch.tensor(row["ecfp"], dtype=torch.float32)
         binds = int(row["binds"])
 
-        # Tokenize SMILES if tokenizer is available
-        if self.tokenizer:
-            tokens = atomInSmiles.smiles_tokenizer(smiles)
-            # Convert tokens to IDs
-            token_ids = [self.tokenizer.token_to_id.get(token, self.tokenizer.token_to_id.get("[UNK]", 2))
-                        for token in tokens]
-            # Truncate or pad
-            token_ids = token_ids[:self.max_length]
-            token_ids = token_ids + [self.tokenizer.token_to_id["[PAD]"]] * (self.max_length - len(token_ids))
-            smiles_tokens = torch.tensor(token_ids, dtype=torch.long)
+        # Mode-specific processing
+        if self.mode == "mlm":
+            # Apply random masking for MLM training
+            masked_ids, mlm_targets = self._apply_mlm_masking(token_ids)
+            return {
+                "smiles": masked_ids,  # Masked token IDs
+                "binds": mlm_targets,  # Shape (seq_len, 2) for MLM loss
+                "ecfp": ecfp,
+            }
         else:
-            smiles_tokens = torch.zeros(self.max_length, dtype=torch.long)
-
-        # Generate ECFP fingerprint from SMILES
-        try:
-            ecfp = self.ecfp_transformer.transform([smiles])[0]
-        except Exception as e:
-            # If SMILES parsing fails, return zero vector
-            print(f"Warning: Failed to generate ECFP for SMILES: {smiles}, error: {e}")
-            ecfp = np.zeros(2048, dtype=np.float32)
-
-        return {
-            "smiles": smiles_tokens,  # Tokenized SMILES
-            "binds": torch.tensor([binds], dtype=torch.float32),  # Single binary label
-            "ecfp": torch.tensor(ecfp, dtype=torch.float32),
-        }
+            # FPS or CLF mode - use pre-computed features as-is
+            return {
+                "smiles": token_ids,  # Unmasked token IDs
+                "binds": torch.tensor([binds], dtype=torch.float32),
+                "ecfp": ecfp,
+            }
 
 
 def collate_fn(batch: List[Dict], tokenizer: SMILESTokenizer, max_length: int) -> Dict:

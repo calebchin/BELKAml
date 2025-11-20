@@ -46,7 +46,8 @@ def train_pipeline(
         bq_table_id=bq_table_id,
     )
 
-    # Step 2: Preprocess
+    # Step 2: Preprocess (includes tokenization and ECFP computation)
+    # Uses default vocab_gcs_path and max_length from component
     preprocess_task = preprocess_gcs(raw_data=ingest_task.outputs["raw_data"])
 
     # Step 3: Split (train/val only, test data is separate)

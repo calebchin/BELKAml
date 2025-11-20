@@ -112,51 +112,8 @@ def train_model(
     print(f"Loading training data from {train_data.path}")
     print(f"Loading validation data from {val_data.path}")
 
-    # Create PyTorch datasets
-    # Note: The data has already been split, so we load each parquet directly
-    train_dataset = BelkaDataset(
-        parquet_path=train_data.path,
-        subset="train",
-        val_split=0.0,  # No split needed, already split by previous component
-        seed=seed,
-        vocab_path=vocab_local_path,
-        max_length=max_length
-    )
-
-    val_dataset = BelkaDataset(
-        parquet_path=val_data.path,
-        subset="train",  # Use "train" subset to get all data (no internal split)
-        val_split=0.0,
-        seed=seed,
-        vocab_path=vocab_local_path,
-        max_length=max_length
-    )
-
-    # Create DataLoaders
-    g = torch.Generator()
-    g.manual_seed(seed)
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=True,
-        drop_last=True,
-        generator=g
-    )
-
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
-        drop_last=False
-    )
-
-    print(f"Train dataset size: {len(train_dataset)}")
-    print(f"Validation dataset size: {len(val_dataset)}")
+    # Note: Datasets will be created per-mode in the training loop
+    # since different modes require different target formats
 
     # --- 4. Initialize model ---
     print(f"Initializing Belka model in {mode} mode...")
@@ -202,6 +159,53 @@ def train_model(
         print(f"Training in mode = {mode}")
         print("-" * 20)
 
+        # Create datasets for this mode
+        train_dataset = BelkaDataset(
+            parquet_path=train_data.path,
+            subset="train",
+            val_split=0.0,
+            seed=seed,
+            vocab_path=vocab_local_path,
+            max_length=max_length,
+            mode=mode  # Mode-specific dataset
+        )
+
+        val_dataset = BelkaDataset(
+            parquet_path=val_data.path,
+            subset="train",
+            val_split=0.0,
+            seed=seed,
+            vocab_path=vocab_local_path,
+            max_length=max_length,
+            mode=mode  # Mode-specific dataset
+        )
+
+        print(f"Train dataset size: {len(train_dataset)}")
+        print(f"Validation dataset size: {len(val_dataset)}")
+
+        # Create DataLoaders for this mode
+        g = torch.Generator()
+        g.manual_seed(seed)
+
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=True,
+            generator=g
+        )
+
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=False
+        )
+
         # Switch model mode (assumes Belka.switch_mode handles heads correctly)
         belka_model.switch_mode(mode)
         print(f"Model switched to {mode} mode.")
@@ -234,9 +238,18 @@ def train_model(
                 if step >= steps_per_epoch:
                     break
 
-                # Extract inputs and targets from batch dictionary
+                # Extract inputs and targets from batch dictionary (mode-specific)
                 x = batch['smiles'].to(device)
-                y = batch['binds'].to(device)
+
+                if mode == "mlm":
+                    # MLM: binds contains (seq_len, 2) targets
+                    y = batch['binds'].to(device)
+                elif mode == "fps":
+                    # FPS: predict ECFP fingerprints
+                    y = batch['ecfp'].to(device)
+                else:  # clf
+                    # CLF: predict binding labels
+                    y = batch['binds'].to(device)
 
                 # Forward pass
                 optimizer.zero_grad()
@@ -260,9 +273,18 @@ def train_model(
                     if validation_steps and step >= validation_steps:
                         break
 
-                    # Extract inputs and targets
+                    # Extract inputs and targets (mode-specific)
                     x = batch['smiles'].to(device)
-                    y = batch['binds'].to(device)
+
+                    if mode == "mlm":
+                        # MLM: binds contains (seq_len, 2) targets
+                        y = batch['binds'].to(device)
+                    elif mode == "fps":
+                        # FPS: predict ECFP fingerprints
+                        y = batch['ecfp'].to(device)
+                    else:  # clf
+                        # CLF: predict binding labels
+                        y = batch['binds'].to(device)
 
                     # Forward pass
                     y_pred = belka_model(x)
@@ -313,12 +335,13 @@ def train_model(
             belka_model.load_state_dict(state_dict)
 
 
-    # Copy best checkpoint to main model output path after all modes have been trained
-    if best_checkpoint_path:
+    # Copy best CLF checkpoint to main model output path after all modes have been trained
+    # Use CLF checkpoint since that's the final classification head used for inference
+    if "clf" in best_checkpoint_overall and best_checkpoint_overall["clf"]:
         final_model_path = checkpoint_dir / "model.pt"
         import shutil
-        shutil.copy(best_checkpoint_path, final_model_path)
-        print(f"Best model saved to {final_model_path}")
+        shutil.copy(best_checkpoint_overall["clf"], final_model_path)
+        print(f"Best CLF model saved to {final_model_path} for inference")
 
     # --- 8. Log metrics to KFP outputs ---
     # Log final (clf) phase losses
