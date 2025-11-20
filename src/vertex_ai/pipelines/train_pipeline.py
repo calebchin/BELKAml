@@ -53,7 +53,7 @@ def train_pipeline(
     # Step 3: Split (train/val only, test data is separate)
     split_task = split_train_val_test_gcs(
         data=preprocess_task.outputs["data"],
-        test_size=0.0,  # No test split (test data is separate)
+        test_size=0.1,  # No test split (test data is separate)
         val_size=0.1,
         stratify_column=stratify_column,
     )

@@ -41,7 +41,7 @@ dropout_rate: 0.1
 
 # Data Parameters
 batch_size: 32
-max_length: 128
+max_length: 150
 seed: 42
 num_workers: 2
 val_split: 0.1  # Used by split component (10% validation split)

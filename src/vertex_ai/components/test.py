@@ -43,7 +43,7 @@ def test_model(
         by default 'gs://belkamlbucket/configs/vertex_train_config.yaml'.
     batch_size : int, optional
         Batch size for GPU inference, by default 1024.
-    y_column : str, optional
+    target_column : str, optional
         Name of the target column in the dataset, by default 'binds'.
 
     Returns
@@ -98,18 +98,27 @@ def test_model(
     print(f"Loaded config: hidden_size={hidden_size}, num_layers={num_layers}, vocab_size={vocab_size}, dropout_rate={dropout_rate}")
 
     test_data_path = Path(test_data.path)
-    if test_data_path.suffix == ".parquet":
+    if test_data_path.is_dir():
+        # Read all files in directory (from sharded output)
+        df = pd.read_parquet(test_data_path)
+    elif test_data_path.suffix == ".parquet":
         df = pd.read_parquet(test_data_path)
     elif test_data_path.suffix == ".csv":
         df = pd.read_csv(test_data_path)
     else:
         raise ValueError(f"Unsupported file format: {test_data_path.suffix}")
 
+    # Validate that we have test data
+    if len(df) == 0:
+        raise ValueError("Test dataset is empty. Ensure test_size > 0 in the split component.")
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    X_test = torch.tensor(df.drop(columns=[target_column]).values, dtype=torch.float32).to(
-        device
-    )
+    # Extract token IDs (model expects token IDs, not concatenated features)
+    # token_ids is a list of integers from preprocessing
+    token_ids_array = np.stack(df["token_ids"].values)
+    X_test = torch.tensor(token_ids_array, dtype=torch.long).to(device)
+
     y_test = np.asarray(df[target_column].values, dtype=float)
 
     # Instantiate model architecture using config from training
@@ -135,7 +144,8 @@ def test_model(
     with torch.no_grad():
         for i in range(0, len(X_test), batch_size):
             batch = X_test[i : i + batch_size]
-            batch_prob = torch.sigmoid(loaded_model(batch)).cpu().numpy().ravel()
+            # Model already applies sigmoid in clf_head, no need to apply again
+            batch_prob = loaded_model(batch).cpu().numpy().ravel()
             y_test_prob_list.append(batch_prob)
     y_test_prob = np.concatenate(y_test_prob_list)
     y_test_pred = (y_test_prob > 0.5).astype(int)
@@ -152,7 +162,6 @@ def test_model(
         "__TEST_recall": float(recall_score(y_test, y_test_pred)),
         "__TEST_MCC": float(matthews_corrcoef(y_test, y_test_pred)),
         "__TEST_sample_size": len(y_test),
-        "__TEST_positive_ratio": float(y_test.mean()),
         "__TEST_positive_ratio": float(y_test.mean()),
         "__TEST_negative_ratio": float(1 - y_test.mean()),
     }
@@ -173,11 +182,13 @@ def test_model(
     # 2. Log PER protein metrics.
     # ---------------------------
 
-    grouped = df.groupby("protein_smiles")
+    grouped = df.groupby("protein_name")
     for protein, group in grouped:
-        y_test_p = y_test[group.index]
-        y_test_prob_p = y_test_prob[group.index]
-        y_test_pred_p = y_test_pred[group.index]
+        # Use boolean indexing to avoid index mismatch with numpy arrays
+        mask = df.index.isin(group.index)
+        y_test_p = y_test[mask]
+        y_test_prob_p = y_test_prob[mask]
+        y_test_pred_p = y_test_pred[mask]
 
         test_metrics_dict = {
             **test_metrics_dict,

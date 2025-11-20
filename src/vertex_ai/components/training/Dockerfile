@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Suppress pip root user warning in containers (expected behavior in Docker)
+ENV PIP_ROOT_USER_ACTION=ignore
+
 # Copy project files needed for installation
 COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
