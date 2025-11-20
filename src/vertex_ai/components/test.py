@@ -132,7 +132,15 @@ def test_model(
     )
 
     # Load state_dict (model weights) from checkpoint
-    state_dict = torch.load(model.path, map_location=device)
+    # model.path is a directory, the actual model file is model.pt inside it
+    model_path = Path(model.path)
+    if model_path.is_dir():
+        model_file = model_path / "model.pt"
+    else:
+        model_file = model_path
+
+    print(f"Loading model from {model_file}")
+    state_dict = torch.load(model_file, map_location=device)
     loaded_model.load_state_dict(state_dict)
 
     # Move to device and set eval mode
