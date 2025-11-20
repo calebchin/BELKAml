@@ -209,13 +209,13 @@ def train_model(
         # Initialize loss function based on mode
         if mode == "mlm":
             loss_fn = CategoricalLoss(mask=-1, epsilon=epsilon, vocab_size=vocab_size)
-            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
+            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode, vocab_size=vocab_size)
         elif mode == "fps":
             loss_fn = BinaryLoss()
-            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
+            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode, vocab_size=vocab_size)
         else: # clf mode - binary classification
             loss_fn = BinaryLoss()
-            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode)
+            metrics_fn = MaskedAUC(mask=-1, multi_label=False, num_labels=None, mode=mode, vocab_size=vocab_size)
 
         # New optimizer & scheduler for each phase (keeps weights, resets LR state)
         optimizer = torch.optim.Adam(belka_model.parameters(), lr=lr, eps=epsilon)

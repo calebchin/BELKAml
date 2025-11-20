@@ -53,18 +53,42 @@ def extract_bq_to_gcs(
     from google.cloud import bigquery
 
     client = bigquery.client.Client(project=bq_project_id, location=bq_project_location)
-    table = bigquery.table.Table(
-        table_ref=f"{bq_project_id}.{bq_dataset_id}.{bq_table_id}"
-    )
 
+    # === TESTING: Extract only first 50 rows. DELETE THIS BLOCK FOR PRODUCTION ===
+    query = f"SELECT * FROM `{bq_project_id}.{bq_dataset_id}.{bq_table_id}` LIMIT 50"
+    destination_uri = raw_data.uri.rstrip('/') + "/data.parquet"
+
+    query_job_config = bigquery.QueryJobConfig(
+        destination=f"{bq_project_id}.{bq_dataset_id}.temp_extract_table",
+        write_disposition="WRITE_TRUNCATE",
+    )
+    query_job = client.query(query, job_config=query_job_config)
+    query_job.result()
+
+    temp_table = bigquery.table.Table(
+        table_ref=f"{bq_project_id}.{bq_dataset_id}.temp_extract_table"
+    )
     job_config = bigquery.job.ExtractJobConfig(destination_format="PARQUET")
-    # Use wildcard to shard output into multiple files for large tables
-    destination_uri = raw_data.uri.rstrip('/') + "/data-*.parquet"
     extract_job = client.extract_table(
-        table,
+        temp_table,
         destination_uri,
         job_config=job_config,
     )
+    # === END TESTING BLOCK ===
+
+    # === PRODUCTION: Uncomment below and delete testing block above ===
+    # table = bigquery.table.Table(
+    #     table_ref=f"{bq_project_id}.{bq_dataset_id}.{bq_table_id}"
+    # )
+    # job_config = bigquery.job.ExtractJobConfig(destination_format="PARQUET")
+    # # Use wildcard to shard output into multiple files for large tables
+    # destination_uri = raw_data.uri.rstrip('/') + "/data-*.parquet"
+    # extract_job = client.extract_table(
+    #     table,
+    #     destination_uri,
+    #     job_config=job_config,
+    # )
+    # === END PRODUCTION BLOCK ===
 
     try:
         extract_job.result()
