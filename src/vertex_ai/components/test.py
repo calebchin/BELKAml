@@ -162,20 +162,36 @@ def test_model(
     # ---------------
 
     # log AUROC, AUPRC (AP), F1 score, precision, recall, MCC
+    # Handle edge cases where metrics may be undefined (NaN) for single-class data
+    def safe_metric(metric_fn, *args, **kwargs):
+        """Compute metric and replace NaN/Inf with None for JSON serialization."""
+        try:
+            value = float(metric_fn(*args, **kwargs))
+            if np.isnan(value) or np.isinf(value):
+                return None
+            return value
+        except (ValueError, ZeroDivisionError):
+            return None
+
     test_metrics_dict = {
-        "__TEST_AUROC": float(roc_auc_score(y_test, y_test_prob)),
-        "__TEST_AUPRC": float(average_precision_score(y_test, y_test_prob)),
-        "__TEST_F1": float(f1_score(y_test, y_test_pred)),
-        "__TEST_precision": precision_score(y_test, y_test_pred),
-        "__TEST_recall": float(recall_score(y_test, y_test_pred)),
-        "__TEST_MCC": float(matthews_corrcoef(y_test, y_test_pred)),
+        "__TEST_AUROC": safe_metric(roc_auc_score, y_test, y_test_prob),
+        "__TEST_AUPRC": safe_metric(average_precision_score, y_test, y_test_prob),
+        "__TEST_F1": safe_metric(f1_score, y_test, y_test_pred, zero_division=0),
+        "__TEST_precision": safe_metric(precision_score, y_test, y_test_pred, zero_division=0),
+        "__TEST_recall": safe_metric(recall_score, y_test, y_test_pred, zero_division=0),
+        "__TEST_MCC": safe_metric(matthews_corrcoef, y_test, y_test_pred),
         "__TEST_sample_size": len(y_test),
         "__TEST_positive_ratio": float(y_test.mean()),
         "__TEST_negative_ratio": float(1 - y_test.mean()),
     }
 
     # log ROC
+    # Handle case where ROC curve may contain inf/nan values
     fpr, tpr, thresholds = roc_curve(y_test, y_test_prob)
+
+    # Replace inf/nan in thresholds with finite values
+    thresholds = np.nan_to_num(thresholds, nan=0.0, posinf=1.0, neginf=0.0)
+
     classification_metrics.log_roc_curve(
         fpr=fpr.tolist(), tpr=tpr.tolist(), threshold=thresholds.tolist()
     )
@@ -201,23 +217,23 @@ def test_model(
 
         test_metrics_dict = {
             **test_metrics_dict,
-            f"__TEST_AUROC_{protein}": float(roc_auc_score(y_test_p, y_test_prob_p)),
-            f"__TEST_AUPRC_{protein}": float(
-                average_precision_score(y_test_p, y_test_prob_p)
-            ),
-            f"__TEST_F1_{protein}": float(f1_score(y_test_p, y_test_pred_p)),
-            f"__TEST_precision_{protein}": float(
-                precision_score(y_test_p, y_test_pred_p)
-            ),
-            f"__TEST_recall_{protein}": float(recall_score(y_test_p, y_test_pred_p)),
-            f"__TEST_MCC_{protein}": float(matthews_corrcoef(y_test_p, y_test_pred_p)),
+            f"__TEST_AUROC_{protein}": safe_metric(roc_auc_score, y_test_p, y_test_prob_p),
+            f"__TEST_AUPRC_{protein}": safe_metric(average_precision_score, y_test_p, y_test_prob_p),
+            f"__TEST_F1_{protein}": safe_metric(f1_score, y_test_p, y_test_pred_p, zero_division=0),
+            f"__TEST_precision_{protein}": safe_metric(precision_score, y_test_p, y_test_pred_p, zero_division=0),
+            f"__TEST_recall_{protein}": safe_metric(recall_score, y_test_p, y_test_pred_p, zero_division=0),
+            f"__TEST_MCC_{protein}": safe_metric(matthews_corrcoef, y_test_p, y_test_pred_p),
             f"__TEST_sample_size_{protein}": len(y_test_p),
             f"__TEST_positive_ratio_{protein}": float(y_test_p.mean()),
             f"__TEST_negative_ratio_{protein}": float(1 - y_test_p.mean()),
         }
 
+    # Log metrics, skipping None values
     for key, val in test_metrics_dict.items():
-        test_metrics.log_metric(key, val)
+        if val is not None:
+            test_metrics.log_metric(key, val)
 
+    # Save to file, removing None values for JSON compatibility
+    metrics_for_json = {k: v for k, v in test_metrics_dict.items() if v is not None}
     with open(test_metrics.path, "w") as f:
-        json.dump(test_metrics_dict, f)
+        json.dump(metrics_for_json, f)
