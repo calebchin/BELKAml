@@ -14,9 +14,9 @@ def deploy_model_to_aip(
     import json
 
     aip.init(project=aipproject_id, location=aipproject_location)
-    aipmodel = aip.init(
-        project=aipproject_id, location=aipproject_location
-    ).Model.upload(
+
+    # Upload model to Vertex AI Model Registry
+    aipmodel = aip.Model.upload(
         display_name="protein-binding-model",
         artifact_uri=model.uri,
         serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/pytorch-cpu.2-1:latest",
@@ -33,7 +33,5 @@ def deploy_model_to_aip(
             aipmodel.upload_evaluation(
                 display_name=display_name,
                 metrics=parsed_metrics,
-                metrics_schema_uri=aip.init(
-                    project=aipproject_id, location=aipproject_location
-                ).schema.dataset.metadata.metric.classification,
+                metrics_schema_uri=aip.schema.dataset.metadata.metric.classification,
             )
