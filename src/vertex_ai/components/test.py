@@ -163,14 +163,19 @@ def test_model(
 
     # log AUROC, AUPRC (AP), F1 score, precision, recall, MCC
     # Handle edge cases where metrics may be undefined (NaN) for single-class data
+    import logging
+
     def safe_metric(metric_fn, *args, **kwargs):
         """Compute metric and replace NaN/Inf with None for JSON serialization."""
         try:
-            value = float(metric_fn(*args, **kwargs))
+            value = metric_fn(*args, **kwargs)
+            # Explicitly check using np.isnan before conversion to catch numpy NaN
             if np.isnan(value) or np.isinf(value):
+                logging.warning(f"{metric_fn.__name__} returned NaN/Inf, replacing with None")
                 return None
-            return value
-        except (ValueError, ZeroDivisionError):
+            return float(value)
+        except (ValueError, ZeroDivisionError, Exception) as e:
+            logging.warning(f"{metric_fn.__name__} raised {type(e).__name__}: {e}, returning None")
             return None
 
     test_metrics_dict = {
@@ -189,7 +194,9 @@ def test_model(
     # Handle case where ROC curve may contain inf/nan values
     fpr, tpr, thresholds = roc_curve(y_test, y_test_prob)
 
-    # Replace inf/nan in thresholds with finite values
+    # Replace inf/nan in all ROC curve arrays with finite values
+    fpr = np.nan_to_num(fpr, nan=0.0, posinf=1.0, neginf=0.0)
+    tpr = np.nan_to_num(tpr, nan=0.0, posinf=1.0, neginf=0.0)
     thresholds = np.nan_to_num(thresholds, nan=0.0, posinf=1.0, neginf=0.0)
 
     classification_metrics.log_roc_curve(
