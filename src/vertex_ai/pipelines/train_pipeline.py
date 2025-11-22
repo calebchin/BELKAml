@@ -5,7 +5,7 @@ from vertex_ai.components.preprocess import preprocess_gcs
 from vertex_ai.components.split import split_train_val_test_gcs
 from vertex_ai.components.train import train_model
 from vertex_ai.components.test import test_model
-from vertex_ai.components.deploy import deploy_model_to_aip
+from vertex_ai.components.register import register_model_to_aip
 
 from typing import Optional
 
@@ -22,7 +22,9 @@ from typing import Optional
 #  3. Splitting.
 #  4. Training.
 #  5. Testing.
-#  6. Deployment.
+#  6. Registration.
+
+# Deployment is done via a separate component to allow for manual review before deploying.
 
 
 @pipeline(
@@ -75,8 +77,8 @@ def train_pipeline(
         target_column=target_column,
     )
 
-    # Step 6: Deploy
-    deploy_task = deploy_model_to_aip(
+    # Step 6: Register model (without deploying to endpoint)
+    register_task = register_model_to_aip(
         aipproject_id=aip_project_id,
         aipproject_location=aip_project_location,
         model=train_task.outputs["model"],
