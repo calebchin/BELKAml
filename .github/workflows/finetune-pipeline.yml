@@ -46,6 +46,6 @@ jobs:
       - name: Submit Fine-tuning Pipeline build
         run: |
           gcloud builds submit . \
-            --config=./src/vertex_ai/build/finetune/cloudbuild.yaml \
+            --config=./src/vertex_ai/cloudbuild/finetune/cloudbuild.yaml \
             --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}" \
             --suppress-logs
