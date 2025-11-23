@@ -1,0 +1,51 @@
+name: Deploy Fine-tuning Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - test_deploy
+    paths:
+      # Finetune-specific files
+      - "src/vertex_ai/components/finetune.py"
+      - "src/vertex_ai/pipelines/finetune_pipeline.py"
+      - "src/vertex_ai/jobs/finetune_pipeline_job.py"
+      - "src/vertex_ai/build/finetune/cloudbuild.yaml"
+      # Shared components used by finetune pipeline
+      - "src/vertex_ai/components/ingest.py"
+      - "src/vertex_ai/components/preprocess.py"
+      - "src/vertex_ai/components/split.py"
+      - "src/vertex_ai/components/test.py"
+      - "src/vertex_ai/components/register.py"
+      # Shared infrastructure
+      - "src/vertex_ai/components/training/Dockerfile"
+      - ".github/workflows/finetune-pipeline.yml"
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: Submit Fine-tuning Pipeline build
+        run: |
+          gcloud builds submit . \
+            --config=./src/vertex_ai/build/finetune/cloudbuild.yaml \
+            --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}" \
+            --suppress-logs
