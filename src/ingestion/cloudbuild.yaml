@@ -46,4 +46,4 @@ substitutions:
   _COMMIT_SHA: 'latest'
 
 options:
-  logging: CLOUD_LOGGING_ONLY
+  logsBucket: 'gs://belka-cloudbuild-logs'
