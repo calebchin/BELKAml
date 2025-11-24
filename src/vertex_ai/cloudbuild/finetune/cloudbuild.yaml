@@ -51,7 +51,6 @@ substitutions:
   _PROJECT_ID: 'required'
   _COMMIT_SHA: 'latest'
 
-options:
-  logsBucket: 'gs://belka-cloudbuild-logs'
+logsBucket: 'gs://belka-cloudbuild-logs'
 # options:
 #   logging: CLOUD_LOGGING_ONLY
