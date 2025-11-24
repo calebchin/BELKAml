@@ -5,7 +5,6 @@ from vertex_ai.components.preprocess import preprocess_gcs
 from vertex_ai.components.split import split_train_val_test_gcs
 from vertex_ai.components.train import train_model
 from vertex_ai.components.test import test_model
-from vertex_ai.components.register import register_model_to_aip
 
 from typing import Optional
 
@@ -22,9 +21,9 @@ from typing import Optional
 #  3. Splitting.
 #  4. Training.
 #  5. Testing.
-#  6. Registration.
 
-# Deployment is done via a separate component to allow for manual review before deploying.
+# Model artifacts are saved to GCS automatically by KFP.
+# Registration and deployment are done via separate scripts after reviewing metrics.
 
 
 @pipeline(
@@ -77,12 +76,6 @@ def train_pipeline(
         target_column=target_column,
     )
 
-    # Step 6: Register model (without deploying to endpoint)
-    register_task = register_model_to_aip(
-        aipproject_id=aip_project_id,
-        aipproject_location=aip_project_location,
-        model=train_task.outputs["model"],
-        train_metrics=train_task.outputs["train_metrics"],
-        val_metrics=train_task.outputs["val_metrics"],
-        test_metrics=test_task.outputs["test_metrics"],
-    )
+    # Model artifacts are automatically saved to GCS by KFP at:
+    # gs://belkaml_pipeline_artifacts/{pipeline_run_id}/train-model_{task_id}/model/model.pt
+    # Registration and deployment are done separately after reviewing test metrics
