@@ -60,6 +60,9 @@ def finetune_pipeline(
 
     # Step 2: Preprocess (includes tokenization and ECFP computation)
     preprocess_task = preprocess_gcs(raw_data=ingest_task.outputs["raw_data"])
+    # Set higher memory for preprocessing large datasets
+    preprocess_task.set_memory_limit('32G')
+    preprocess_task.set_cpu_limit('8')
 
     # Step 3: Split
     split_task = split_train_val_test_gcs(
@@ -68,6 +71,9 @@ def finetune_pipeline(
         val_size=0.1,
         stratify_column=stratify_column,
     )
+    # Set memory for splitting large datasets
+    split_task.set_memory_limit('16G')
+    split_task.set_cpu_limit('4')
 
     # Step 4: Fine-tune (instead of training from scratch)
     finetune_task = finetune_model(
@@ -79,6 +85,9 @@ def finetune_pipeline(
         config_path="gs://belkamlbucket/configs/vertex_train_config.yaml",
         target_column=target_column,
     )
+    # Set higher memory for fine-tuning
+    finetune_task.set_memory_limit('32G')
+    finetune_task.set_cpu_limit('8')
 
     # Step 5: Test
     test_task = test_model(
