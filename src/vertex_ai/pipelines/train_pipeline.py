@@ -51,7 +51,7 @@ def train_pipeline(
     # Uses default vocab_gcs_path and max_length from component
     preprocess_task = preprocess_gcs(raw_data=ingest_task.outputs["raw_data"])
     # Set higher memory for preprocessing large datasets
-    preprocess_task.set_memory_limit('32G')
+    preprocess_task.set_memory_limit('64G')
     preprocess_task.set_cpu_limit('8')
 
     # Step 3: Split (train/val only, test data is separate)
@@ -62,7 +62,7 @@ def train_pipeline(
         stratify_column=stratify_column,
     )
     # Set memory for splitting large datasets
-    split_task.set_memory_limit('16G')
+    split_task.set_memory_limit('32G')
     split_task.set_cpu_limit('4')
 
     # Step 4: Train
@@ -74,7 +74,7 @@ def train_pipeline(
         target_column=target_column,
     )
     # Set higher memory for model training
-    train_task.set_memory_limit('32G')
+    train_task.set_memory_limit('64G')
     train_task.set_cpu_limit('8')
 
     # Step 5: Test

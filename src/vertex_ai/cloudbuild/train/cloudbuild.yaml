@@ -29,18 +29,17 @@ steps:
   entrypoint: 'gsutil'
   args: ['cp', 'src/vertex_ai/train_pipeline.yaml', 'gs://belkaml_pipeline_artifacts/train_pipeline.yaml']
 
-# Step 5 (OPTIONAL): Automatically trigger pipeline run
-# Uncomment the step below to enable automatic pipeline execution after deployment
-# - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-#   entrypoint: 'gcloud'
-#   args: [
-#     'ai', 'pipelines', 'run',
-#     '--display-name=Train pipeline run - ${_COMMIT_SHA}',
-#     '--project=${_PROJECT_ID}',
-#     '--region=northamerica-northeast2',
-#     '--file=gs://belkaml_pipeline_artifacts/train_pipeline.yaml',
-#     '--parameter-values', 'bq_project_id=belkaml,bq_project_location=US,bq_dataset_id=belka_train_dataset,bq_table_id=all_data,aip_project_id=belkaml,aip_project_location=northamerica-northeast2,stratify_column=protein_name,y_column=binds'
-#   ]
+# Step 5: Automatically trigger pipeline run after deployment
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: 'gcloud'
+  args: [
+    'ai', 'pipelines', 'run',
+    '--display-name=Train pipeline run - ${_COMMIT_SHA}',
+    '--project=${_PROJECT_ID}',
+    '--region=northamerica-northeast2',
+    '--file=gs://belkaml_pipeline_artifacts/train_pipeline.yaml',
+    '--parameter-values', 'bq_project_id=belkaml,bq_project_location=US,bq_dataset_id=belka_train_dataset,bq_table_id=all_data,aip_project_id=belkaml,aip_project_location=northamerica-northeast2,stratify_column=protein_name,target_column=binds'
+  ]
 
 images:
 - 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:${_COMMIT_SHA}'
