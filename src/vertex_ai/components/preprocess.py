@@ -158,30 +158,29 @@ def preprocess_gcs(
     logging.info(f"Processing {total_rows:,} rows in chunks of {chunk_size:,}")
 
     if output_format == "parquet":
-        file_path = data_dir / "data.parquet"
-        first_chunk = True
+        # Write each chunk to a separate parquet file to avoid Arrow list overflow
+        chunk_files = []
 
         for i in range(0, total_rows, chunk_size):
             chunk_df = df.iloc[i:i+chunk_size].copy()
-            logging.info(f"Processing chunk {i//chunk_size + 1}/{(total_rows + chunk_size - 1)//chunk_size} (rows {i:,} to {min(i+chunk_size, total_rows):,})")
+            chunk_num = i // chunk_size
+            logging.info(f"Processing chunk {chunk_num + 1}/{(total_rows + chunk_size - 1)//chunk_size} (rows {i:,} to {min(i+chunk_size, total_rows):,})")
 
             # Apply transformations to chunk
             chunk_df["token_ids"] = chunk_df["molecule_smiles"].apply(tokenize_smiles)
             chunk_df["ecfp"] = chunk_df["molecule_smiles"].apply(compute_ecfp)
 
-            # Write chunk to parquet (append mode after first chunk)
-            if first_chunk:
-                chunk_df.to_parquet(file_path, index=False)
-                first_chunk = False
-            else:
-                # Read existing, concatenate, and write back
-                existing_df = pd.read_parquet(file_path)
-                combined_df = pd.concat([existing_df, chunk_df], ignore_index=True)
-                combined_df.to_parquet(file_path, index=False)
+            # Write chunk to separate parquet file
+            chunk_file = data_dir / f"data_chunk_{chunk_num}.parquet"
+            chunk_df.to_parquet(chunk_file, index=False)
+            chunk_files.append(chunk_file)
 
             del chunk_df  # Free memory
 
+        logging.info(f"Wrote {len(chunk_files)} chunk files. Downstream components will read all parquet files from directory.")
+
     else:
+        # CSV can append efficiently
         file_path = data_dir / "data.csv"
         first_chunk = True
 
@@ -199,7 +198,5 @@ def preprocess_gcs(
 
             del chunk_df  # Free memory
 
-    logging.info(f"Preprocessing complete. Dataset saved to {file_path}")
-
-    logging.info(f"Dataset saved to GCS at {file_path}")
+    logging.info(f"Preprocessing complete. Dataset saved to {data_dir}")
 
