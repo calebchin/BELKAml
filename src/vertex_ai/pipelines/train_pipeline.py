@@ -50,7 +50,7 @@ def train_pipeline(
     # Step 2: Preprocess (includes tokenization and ECFP computation)
     # Uses default vocab_gcs_path and max_length from component
     preprocess_task = preprocess_gcs(raw_data=ingest_task.outputs["raw_data"])
-    # Set higher memory for preprocessing large datasets
+    # Set memory for preprocessing with chunked processing
     preprocess_task.set_memory_limit('64G')
     preprocess_task.set_cpu_limit('8')
 

@@ -120,6 +120,7 @@ def preprocess_gcs(
     # Add tokenization
     logging.info("Tokenizing SMILES strings...")
     tokenizer = SMILESTokenizer(vocab_path)
+    ecfp_transformer = ECFPFingerprint(fp_size=2048)
 
     def tokenize_smiles(smiles: str) -> List[int]:
         """Tokenize a SMILES string and convert to token IDs with padding."""
@@ -140,12 +141,6 @@ def preprocess_gcs(
             # Return padding tokens on error
             return [tokenizer.token_to_id["[PAD]"]] * max_length
 
-    df["token_ids"] = df["molecule_smiles"].apply(tokenize_smiles)
-
-    # Add ECFP fingerprints
-    logging.info("Computing ECFP fingerprints...")
-    ecfp_transformer = ECFPFingerprint(fp_size=2048)
-
     def compute_ecfp(smiles: str) -> np.ndarray:
         """Compute ECFP fingerprint for a SMILES string."""
         try:
@@ -154,19 +149,57 @@ def preprocess_gcs(
             logging.warning(f"Failed to compute ECFP for SMILES '{smiles}': {e}")
             return np.zeros(2048, dtype=np.float32)
 
-    df["ecfp"] = df["molecule_smiles"].apply(compute_ecfp)
-
-    logging.info(f"Preprocessing complete. Shape: {df.shape}")
-
+    # Process in chunks to avoid memory issues with large datasets
     data_dir = Path(data.path)
     data_dir.mkdir(parents=True, exist_ok=True)
 
+    chunk_size = 1_000_000  # Process 1M rows at a time
+    total_rows = len(df)
+    logging.info(f"Processing {total_rows:,} rows in chunks of {chunk_size:,}")
+
     if output_format == "parquet":
         file_path = data_dir / "data.parquet"
-        df.to_parquet(file_path, index=False)
+        first_chunk = True
+
+        for i in range(0, total_rows, chunk_size):
+            chunk_df = df.iloc[i:i+chunk_size].copy()
+            logging.info(f"Processing chunk {i//chunk_size + 1}/{(total_rows + chunk_size - 1)//chunk_size} (rows {i:,} to {min(i+chunk_size, total_rows):,})")
+
+            # Apply transformations to chunk
+            chunk_df["token_ids"] = chunk_df["molecule_smiles"].apply(tokenize_smiles)
+            chunk_df["ecfp"] = chunk_df["molecule_smiles"].apply(compute_ecfp)
+
+            # Write chunk to parquet (append mode after first chunk)
+            if first_chunk:
+                chunk_df.to_parquet(file_path, index=False)
+                first_chunk = False
+            else:
+                # Read existing, concatenate, and write back
+                existing_df = pd.read_parquet(file_path)
+                combined_df = pd.concat([existing_df, chunk_df], ignore_index=True)
+                combined_df.to_parquet(file_path, index=False)
+
+            del chunk_df  # Free memory
+
     else:
         file_path = data_dir / "data.csv"
-        df.to_csv(file_path, index=False)
+        first_chunk = True
+
+        for i in range(0, total_rows, chunk_size):
+            chunk_df = df.iloc[i:i+chunk_size].copy()
+            logging.info(f"Processing chunk {i//chunk_size + 1}/{(total_rows + chunk_size - 1)//chunk_size} (rows {i:,} to {min(i+chunk_size, total_rows):,})")
+
+            # Apply transformations to chunk
+            chunk_df["token_ids"] = chunk_df["molecule_smiles"].apply(tokenize_smiles)
+            chunk_df["ecfp"] = chunk_df["molecule_smiles"].apply(compute_ecfp)
+
+            # Write chunk to CSV
+            chunk_df.to_csv(file_path, mode='w' if first_chunk else 'a', header=first_chunk, index=False)
+            first_chunk = False
+
+            del chunk_df  # Free memory
+
+    logging.info(f"Preprocessing complete. Dataset saved to {file_path}")
 
     logging.info(f"Dataset saved to GCS at {file_path}")
 
