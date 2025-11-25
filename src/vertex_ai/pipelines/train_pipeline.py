@@ -51,8 +51,8 @@ def train_pipeline(
     # Uses default vocab_gcs_path and max_length from component
     preprocess_task = preprocess_gcs(raw_data=ingest_task.outputs["raw_data"])
     # Set memory for preprocessing with chunked processing
-    preprocess_task.set_memory_limit('64G')
-    preprocess_task.set_cpu_limit('8')
+    preprocess_task.set_memory_limit('32G')
+    preprocess_task.set_cpu_limit('16')
 
     # Step 3: Split (train/val only, test data is separate)
     split_task = split_train_val_test_gcs(
@@ -74,7 +74,7 @@ def train_pipeline(
         target_column=target_column,
     )
     # Set higher memory for model training
-    train_task.set_memory_limit('64G')
+    train_task.set_memory_limit('32G')
     train_task.set_cpu_limit('8')
 
     # Step 5: Test
