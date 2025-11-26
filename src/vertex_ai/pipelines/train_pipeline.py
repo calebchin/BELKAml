@@ -5,7 +5,6 @@ from vertex_ai.components.preprocess import preprocess_gcs
 from vertex_ai.components.split import split_train_val_test_gcs
 from vertex_ai.components.train import train_model
 from vertex_ai.components.test import test_model
-from vertex_ai.components.deploy import deploy_model_to_aip
 
 from typing import Optional
 
@@ -22,7 +21,9 @@ from typing import Optional
 #  3. Splitting.
 #  4. Training.
 #  5. Testing.
-#  6. Deployment.
+
+# Model artifacts are saved to GCS automatically by KFP.
+# Registration and deployment are done via separate scripts after reviewing metrics.
 
 
 @pipeline(
@@ -46,16 +47,23 @@ def train_pipeline(
         bq_table_id=bq_table_id,
     )
 
-    # Step 2: Preprocess
+    # Step 2: Preprocess (includes tokenization and ECFP computation)
+    # Uses default vocab_gcs_path and max_length from component
     preprocess_task = preprocess_gcs(raw_data=ingest_task.outputs["raw_data"])
+    # Set memory for preprocessing with chunked processing
+    preprocess_task.set_memory_limit('32G')
+    preprocess_task.set_cpu_limit('16')
 
     # Step 3: Split (train/val only, test data is separate)
     split_task = split_train_val_test_gcs(
         data=preprocess_task.outputs["data"],
-        test_size=0.0,  # No test split (test data is separate)
+        test_size=0.1,  # No test split (test data is separate)
         val_size=0.1,
         stratify_column=stratify_column,
     )
+    # Set memory for splitting large datasets
+    split_task.set_memory_limit('32G')
+    split_task.set_cpu_limit('16')
 
     # Step 4: Train
     # Training parameters are loaded from config file in GCS: gs://belkamlbucket/configs/vertex_train_config.yaml
@@ -65,6 +73,9 @@ def train_pipeline(
         config_path="gs://belkamlbucket/configs/vertex_train_config.yaml",
         target_column=target_column,
     )
+    # Set higher memory for model training
+    train_task.set_memory_limit('32G')
+    train_task.set_cpu_limit('8')
 
     # Step 5: Test
     test_task = test_model(
@@ -73,13 +84,10 @@ def train_pipeline(
         batch_size=1024,
         target_column=target_column,
     )
+    test_task.set_memory_limit('32G')
+    test_task.set_cpu_limit('8')
 
-    # Step 6: Deploy
-    deploy_task = deploy_model_to_aip(
-        aipproject_id=aip_project_id,
-        aipproject_location=aip_project_location,
-        model=train_task.outputs["model"],
-        train_metrics=train_task.outputs["train_metrics"],
-        val_metrics=train_task.outputs["val_metrics"],
-        test_metrics=test_task.outputs["test_metrics"],
-    )
+
+    # Model artifacts are automatically saved to GCS by KFP at:
+    # gs://belkaml_pipeline_artifacts/{pipeline_run_id}/train-model_{task_id}/model/model.pt
+    # Registration and deployment are done separately after reviewing test metrics

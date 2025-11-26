@@ -40,7 +40,8 @@ dependencies = [
     "dask",
     "kfp>=2.14.6",
     "google-cloud-bigquery",
-    "pyyaml"
+    "pyyaml",
+    "ray"
 ]
 
 [project.optional-dependencies]

@@ -3,7 +3,7 @@ from kfp.v2.dsl import component, Dataset, Output
 
 @component(
     base_image="python:3.12",
-    packages_to_install=["google-cloud-bigquery==2.30.0"],
+    packages_to_install=["google-cloud-bigquery==3.38.0"],
 )
 def extract_bq_to_gcs(
     bq_project_id: str,
@@ -53,21 +53,47 @@ def extract_bq_to_gcs(
     from google.cloud import bigquery
 
     client = bigquery.client.Client(project=bq_project_id, location=bq_project_location)
+
+    # === TESTING: Extract only first 50 rows. DELETE THIS BLOCK FOR PRODUCTION ===
+    # query = f"SELECT * FROM `{bq_project_id}.{bq_dataset_id}.{bq_table_id}` LIMIT 50"
+    # destination_uri = raw_data.uri.rstrip('/') + "/data.parquet"
+
+    # query_job_config = bigquery.QueryJobConfig(
+    #     destination=f"{bq_project_id}.{bq_dataset_id}.temp_extract_table",
+    #     write_disposition="WRITE_TRUNCATE",
+    # )
+    # query_job = client.query(query, job_config=query_job_config)
+    # query_job.result()
+
+    # temp_table = bigquery.table.Table(
+    #     table_ref=f"{bq_project_id}.{bq_dataset_id}.temp_extract_table"
+    # )
+    # job_config = bigquery.job.ExtractJobConfig(destination_format="PARQUET")
+    # extract_job = client.extract_table(
+    #     temp_table,
+    #     destination_uri,
+    #     job_config=job_config,
+    # )
+    # === END TESTING BLOCK ===
+
+    # === PRODUCTION: Uncomment below and delete testing block above ===
     table = bigquery.table.Table(
         table_ref=f"{bq_project_id}.{bq_dataset_id}.{bq_table_id}"
     )
-
     job_config = bigquery.job.ExtractJobConfig(destination_format="PARQUET")
+    # Use wildcard to shard output into multiple files for large tables
+    destination_uri = raw_data.uri.rstrip('/') + "/data-*.parquet"
     extract_job = client.extract_table(
         table,
-        raw_data.uri,
+        destination_uri,
         job_config=job_config,
     )
+    # === END PRODUCTION BLOCK ===
 
     try:
         extract_job.result()
         logging.info(f"BQ table extracted to GCS at {raw_data.uri}")
-    except GoogleCloudError as e:
+    except Exception as e:
         logging.error(e)
         logging.error(extract_job.error_result)
         logging.error(extract_job.errors)

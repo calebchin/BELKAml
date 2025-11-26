@@ -5,29 +5,35 @@ from kfp.v2.dsl import component, Input, Output, Dataset, Model, Metrics
 @component(
     base_image="northamerica-northeast2-docker.pkg.dev/belkaml/belka-repo/belkaml-trainer:latest",
 )
-def train_model(
+def finetune_model(
     train_data: Input[Dataset],
     val_data: Input[Dataset],
+    pretrained_model_id: str,
     model: Output[Model],
     train_metrics: Output[Metrics],
     val_metrics: Output[Metrics],
     classification_metrics: Output[ClassificationMetrics],
+    aipproject_id: str = "belkaml",
+    aipproject_location: str = "northamerica-northeast2",
     config_path: str = "gs://belkamlbucket/configs/vertex_train_config.yaml",
     target_column: str = "binds",
 ) -> None:
-    """Train Belka model on protein-molecule binding data.
+    """Fine-tune Belka model from pretrained weights on new protein-molecule binding data.
 
-    This component loads training configuration from GCS, loads parquet data,
-    downloads the vocabulary file, initializes the Belka transformer model,
-    and trains it with early stopping and learning rate scheduling.
+    This component loads a pretrained model from Vertex AI Model Registry, extracts the
+    shared encoder/embedding weights, and continues training on new data. Task heads
+    (MLM, FPS, CLF) are reinitialized to allow full sequential training.
 
     Args:
         train_data: Training dataset (parquet format on GCS)
         val_data: Validation dataset (parquet format on GCS)
+        pretrained_model_id: Model ID from Vertex AI Model Registry (e.g., "projects/.../models/123")
         model: Output model artifact
         train_metrics: Training metrics output
         val_metrics: Validation metrics output
         classification_metrics: Classification metrics output
+        aipproject_id: GCP project ID
+        aipproject_location: GCP region
         config_path: GCS path to training config YAML file
         target_column: Name of target column in data
     """
@@ -35,7 +41,7 @@ def train_model(
     import pandas as pd
     import os
     from pathlib import Path
-    from google.cloud import storage
+    from google.cloud import storage, aiplatform as aip
     import yaml
     import numpy as np
 
@@ -108,15 +114,37 @@ def train_model(
     vocab_blob.download_to_filename(vocab_local_path)
     print(f"Downloaded vocab.txt to {vocab_local_path}")
 
-    # --- 3. Load data from GCS artifacts ---
-    # print(f"Loading training data from {train_data.path}")
-    # print(f"Loading validation data from {val_data.path}")
+    # --- 3. Download pretrained model from Model Registry ---
+    print(f"\n{'='*60}")
+    print(f"LOADING PRETRAINED MODEL")
+    print(f"{'='*60}")
 
-    # # Note: Datasets will be created per-mode in the training loop
-    # # since different modes require different target formats
+    aip.init(project=aipproject_id, location=aipproject_location)
+    pretrained_model = aip.Model(pretrained_model_id)
+    print(f"Retrieved pretrained model: {pretrained_model.display_name}")
+    print(f"  Model URI: {pretrained_model.uri}")
 
-    # --- 4. Initialize model ---
-    print(f"Initializing Belka model in {mode} mode...")
+    # Download model artifact from GCS
+    pretrained_model_local_dir = "/tmp/pretrained_model"
+    Path(pretrained_model_local_dir).mkdir(parents=True, exist_ok=True)
+
+    # Parse GCS URI and download model.pt
+    model_uri = pretrained_model.uri
+    if model_uri.startswith("gs://"):
+        model_bucket_name = model_uri.replace("gs://", "").split("/")[0]
+        model_blob_prefix = "/".join(model_uri.replace("gs://", "").split("/")[1:])
+
+        model_bucket = storage_client.bucket(model_bucket_name)
+        model_blob = model_bucket.blob(f"{model_blob_prefix}/model.pt")
+
+        pretrained_model_path = Path(pretrained_model_local_dir) / "model.pt"
+        model_blob.download_to_filename(str(pretrained_model_path))
+        print(f"Downloaded pretrained model to {pretrained_model_path}")
+    else:
+        raise ValueError(f"Unsupported model URI format: {model_uri}")
+
+    # --- 4. Initialize model and load pretrained weights ---
+    print(f"\nInitializing Belka model architecture...")
     model_params = {
         "hidden_size": hidden_size,
         "dropout_rate": dropout_rate,
@@ -126,6 +154,27 @@ def train_model(
     }
 
     belka_model = Belka(**model_params).to(device)
+
+    # Load pretrained state dict
+    print(f"Loading pretrained weights...")
+    pretrained_state = torch.load(pretrained_model_path, map_location=device)
+
+    # Filter to only load shared weights (exclude task heads)
+    # Shared components: embeddings, encoder_layers
+    # Exclude: mlm_head, fps_head, clf_head, pool
+    shared_keys = [k for k in pretrained_state.keys()
+                   if not k.startswith(('mlm_head', 'fps_head', 'clf_head', 'pool'))]
+    shared_state = {k: pretrained_state[k] for k in shared_keys}
+
+    print(f"Loading {len(shared_keys)} pretrained parameters (excluding task heads):")
+    for key in shared_keys:
+        print(f"  ✓ {key}")
+
+    # Load only shared weights (strict=False allows missing head weights)
+    belka_model.load_state_dict(shared_state, strict=False)
+    print(f"\n✓ Pretrained encoder/embeddings loaded successfully!")
+    print(f"✓ Task heads (MLM, FPS, CLF) initialized from scratch")
+    print(f"{'='*60}\n")
 
     # Sequentially train all modes
     training_order = ["mlm", "fps", "clf"]
@@ -137,11 +186,11 @@ def train_model(
     final_val_loss = 0
     total_epochs_trained = 0
 
-    # --- 6. Checkpointing function ---
+    # --- 5. Checkpointing function ---
     checkpoint_dir = Path(model.path)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_checkpoint(mode, epoch, val_loss) -> Path:
+    def save_checkpoint(mode, epoch, val_loss):
         """Save model checkpoint to GCS artifact directory"""
         checkpoint_name = f"{model_name}_{mode}_{epoch:03d}_{val_loss:.4f}.pt"
         checkpoint_path = checkpoint_dir / checkpoint_name
@@ -151,12 +200,12 @@ def train_model(
 
     for mode in training_order:
 
-        # --- 7. Training loop ---
-        print(f"\nStarting training...")
+        # --- 6. Training loop ---
+        print(f"\nStarting fine-tuning...")
         print(f"Model architecture:\n{belka_model}")
 
         print("-" * 20)
-        print(f"Training in mode = {mode}")
+        print(f"Fine-tuning in mode = {mode}")
         print("-" * 20)
 
         # Create datasets for this mode
@@ -315,15 +364,15 @@ def train_model(
                 if epochs_no_improve >= patience:
                     print(f"Early stopping at epoch {epoch + 1}")
                     break
-            
+
             total_epochs_trained += 1
             final_train_loss = train_loss
             final_val_loss = val_loss
-        
-        print(f"[{mode}] training completed. Best val_loss: {best_val_loss:.4f}")
 
-        # --- 8. Save final model and metrics ---
-        print(f"\nTraining completed. Best validation loss: {best_val_loss:.4f}")
+        print(f"[{mode}] fine-tuning completed. Best val_loss: {best_val_loss:.4f}")
+
+        # --- 7. Save final model and metrics ---
+        print(f"\nFine-tuning completed. Best validation loss: {best_val_loss:.4f}")
         best_val_loss_overall[mode] = best_val_loss
         best_checkpoint_overall[mode] = best_checkpoint_path
 
@@ -356,5 +405,6 @@ def train_model(
             val_metrics.log_metric(f"best_val_loss_{m}", best_val_loss_overall[m])
 
     val_metrics.log_metric("total_epochs_trained", total_epochs_trained)
+    val_metrics.log_metric("finetuned_from_model", pretrained_model_id)
 
-    print("Training component completed successfully!")
+    print("Fine-tuning component completed successfully!")

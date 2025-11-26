@@ -1,4 +1,4 @@
-from .deploy import deploy_model_to_aip
+from .deploy import deploy_model_endpoint
 from .test import test_model
 from .train import train_model
 from .split import split_train_val_test_gcs
