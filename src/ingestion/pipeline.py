@@ -63,7 +63,7 @@ class MoleculeDataPipeline:
         # NOTE: The filename of the incoming CSV or PARQUET should be either `batch-*.csv` or
         # `batch-*.parquet`, where the wildcard * is the experiment batch ID.
         experimental_batch_num_match = re.fullmatch(
-            r"batch-(\d+)\.(csv|parquet)", file_name
+            r"batch-(\d+)\.(csv|parquet)", file_name.split("/")[-1]
         )
         if not experimental_batch_num_match:
             raise ValueError(
