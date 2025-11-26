@@ -27,38 +27,20 @@ steps:
 # Step 4: Upload compiled pipeline YAML to GCS
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'gsutil'
-  args: ['cp', 'src/vertex_ai/train_pipeline.yaml', 'gs://belkaml_pipeline_artifacts/train_pipeline.yaml']
+  args: ['cp', 'src/vertex_ai/train_pipeline.yaml', 'gs://belkaml_pipeline_artifacts/train_pipeline_with_untested_batch_selection.yaml']
 
-# Step 5: Automatically trigger pipeline run after deployment
+# Step 5 (OPTIONAL): Automatically trigger pipeline run
+# Uncomment the step below to enable automatic pipeline execution after deployment
 # - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-#   entrypoint: 'bash'
-#   args:
-#     - '-c'
-#     - |
-#       pip install google-cloud-aiplatform
-#       python3 - <<'PYTHON_EOF'
-#       from google.cloud import aiplatform as aip
-
-#       aip.init(project="${_PROJECT_ID}", location="northamerica-northeast2")
-
-#       job = aip.PipelineJob(
-#           display_name="train-pipeline-${_COMMIT_SHA}",
-#           template_path="gs://belkaml_pipeline_artifacts/train_pipeline.yaml",
-#           pipeline_root="gs://belkaml_pipeline_artifacts",
-#           parameter_values={
-#               "bq_project_id": "belkaml",
-#               "bq_project_location": "US",
-#               "bq_dataset_id": "belka_train_dataset",
-#               "bq_table_id": "all_data",
-#               "aip_project_id": "belkaml",
-#               "aip_project_location": "northamerica-northeast2",
-#               "stratify_column": "protein_name",
-#               "target_column": "binds",
-#           },
-#       )
-#       job.submit()
-#       print(f"Pipeline submitted: {job.resource_name}")
-#       PYTHON_EOF
+#   entrypoint: 'gcloud'
+#   args: [
+#     'ai', 'pipelines', 'run',
+#     '--display-name=Train pipeline run - ${_COMMIT_SHA}',
+#     '--project=${_PROJECT_ID}',
+#     '--region=northamerica-northeast2',
+#     '--file=gs://belkaml_pipeline_artifacts/train_pipeline.yaml',
+#     '--parameter-values', 'bq_project_id=belkaml,bq_project_location=US,bq_dataset_id=belka_train_dataset,bq_table_id=all_data,aip_project_id=belkaml,aip_project_location=northamerica-northeast2,stratify_column=protein_name,y_column=binds'
+#   ]
 
 images:
 - 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belkaml-trainer:${_COMMIT_SHA}'
@@ -68,4 +50,5 @@ substitutions:
   _PROJECT_ID: 'required'
   _COMMIT_SHA: 'latest'
 
-logsBucket: 'gs://belka-cloudbuild-logs'
+options:
+  logging: CLOUD_LOGGING_ONLY

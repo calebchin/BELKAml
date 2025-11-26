@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - test_deploy
+      - website
     paths:
       # Finetune-specific files
       - "src/vertex_ai/components/finetune.py"
