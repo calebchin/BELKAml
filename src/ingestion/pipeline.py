@@ -3,7 +3,8 @@ Merges parquet molecule data with CSV binding data and loads to BigQuery
 """
 
 import logging
-from typing import Dict, Any
+import re
+from typing import Any, Dict
 
 import pandas as pd
 import yaml
@@ -56,11 +57,20 @@ class MoleculeDataPipeline:
         # schema cols as a list
         schema_cols = self.config["data_preprocessing"]["schema_cols"]
         # col_name_map should be a dict mapping col names in csv to schema col names
-        #col_name_map = self.config["data_preprocessing"]["col_name_map"]
+        # col_name_map = self.config["data_preprocessing"]["col_name_map"]
+
         # experimental batch num
-        experimental_batch_num = self.config["data_preprocessing"][
-            "experimental_batch_num"
-        ]
+        # NOTE: The filename of the incoming CSV or PARQUET should be either `batch-*.csv` or
+        # `batch-*.parquet`, where the wildcard * is the experiment batch ID.
+        experimental_batch_num_match = re.fullmatch(
+            r"batch-(\d+)\.(csv|parquet)", file_name
+        )
+        if not experimental_batch_num_match:
+            raise ValueError(
+                f"Unsupported file name for {file_name}. Must be `batch-*.csv` or `batch-*.parquet`."
+            )
+        experimental_batch_num = int(experimental_batch_num_match.group(1))
+
         # tz info
         tz = self.config["data_preprocessing"]["timezone"]
 
