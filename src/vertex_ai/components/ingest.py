@@ -93,7 +93,7 @@ def extract_bq_to_gcs(
         CREATE OR REPLACE TABLE `{temp_table_id}` AS
         SELECT *
         FROM `{bq_project_id}.{bq_dataset_id}.{bq_table_id}`
-        WHERE experiment_batch IN ({batch_ids_str})
+        WHERE experimental_batch IN ({batch_ids_str})
     """
     query_job = client.query(query)
     query_job.result()
