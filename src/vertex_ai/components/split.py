@@ -59,7 +59,7 @@ def split_train_val_test_gcs(
         ds = ds.random_shuffle(seed=random_state)
         if test_size > 0:
             train_size = 1 - test_size - val_size
-            train_ds, val_ds, train_ds = ds.split_proportionately([train_size, val_size])
+            train_ds, val_ds, test_ds = ds.split_proportionately([train_size, val_size])
         else:
             train_ds, val_ds = ds.split_proportionately([ 1 - val_size])
             test_ds = None
@@ -70,32 +70,29 @@ def split_train_val_test_gcs(
                 test_size=test_size,
                 stratify=stratify_column,
                 seed=random_state,
-                shuffle=True
             )
             relative_val_size = val_size / (1 - test_size)
             train_ds, val_ds = train_val_ds.train_test_split(
                 test_size=relative_val_size,
                 stratify=stratify_column,
                 seed=random_state,
-                shuffle=True
             )
         else:
             train_ds, val_ds = ds.train_test_split(
                 test_size=val_size,
                 stratify=stratify_column,
                 seed=random_state,
-                shuffle=True
             )
             test_ds = None
 
-        logging.info("Writing split data out...")
-        train_ds.write_parquet(train_data.path)
-        val_ds.write_parquet(val_data.path)
-        if test_ds:
-            test_ds.write_parquet(test_data.path)
-        else:
-            Path(test_data.path).mkdir(parents=True, exist_ok=True)
-            ray.data.from_items([]).write_parquet(test_data.path)
+    logging.info("Writing split data out...")
+    train_ds.write_parquet(train_data.path)
+    val_ds.write_parquet(val_data.path)
+    if test_ds:
+        test_ds.write_parquet(test_data.path)
+    else:
+        Path(test_data.path).mkdir(parents=True, exist_ok=True)
+        ray.data.from_items([]).write_parquet(test_data.path)
 
 
     

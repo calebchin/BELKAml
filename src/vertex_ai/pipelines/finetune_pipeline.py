@@ -6,7 +6,7 @@ from vertex_ai.components.split import split_train_val_test_gcs
 from vertex_ai.components.finetune import finetune_model
 from vertex_ai.components.test import test_model
 
-from typing import Optional
+from typing import Optional, List
 
 
 @pipeline(
@@ -22,6 +22,9 @@ def finetune_pipeline(
     aip_project_location: str,
     stratify_column: Optional[str],
     target_column: str,
+    experiment_batch_ids: List[
+        int
+    ],
 ):
     """Fine-tune a pretrained Belka model on new data.
 
@@ -56,6 +59,7 @@ def finetune_pipeline(
         bq_project_location=bq_project_location,
         bq_dataset_id=bq_dataset_id,
         bq_table_id=bq_table_id,
+        experiment_batch_ids=experiment_batch_ids
     )
 
     # Step 2: Preprocess (includes tokenization and ECFP computation)
