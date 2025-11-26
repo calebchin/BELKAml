@@ -1,4 +1,6 @@
-from kfp.v2.dsl import component, Dataset, Output
+from typing import List
+
+from kfp.v2.dsl import Dataset, Output, component
 
 
 @component(
@@ -10,6 +12,7 @@ def extract_bq_to_gcs(
     bq_project_location: str,
     bq_dataset_id: str,
     bq_table_id: str,
+    experiment_batch_ids: List[int],
     raw_data: Output[Dataset],
 ) -> None:
     """Extracts a BigQuery table and saves it as a Parquet file in Google Cloud Storage (GCS).
@@ -28,6 +31,9 @@ def extract_bq_to_gcs(
         The dataset ID within the project that contains the BigQuery table.
     bq_table_id : str
         The table ID (without project ID or dataset ID prefix) identifying the table to extract.
+    experiment_batch_ids : List[int]
+        A list of experiment batch IDs to include in the dataset. Other experiment batch IDs will
+        be excluded.
     raw_data : Output[Dataset]
         The output dataset artifact representing the exported table in GCS.
         The `.uri` property of this artifact specifies the GCS destination path.
@@ -50,6 +56,7 @@ def extract_bq_to_gcs(
 
     """
     import logging
+
     from google.cloud import bigquery
 
     client = bigquery.client.Client(project=bq_project_id, location=bq_project_location)
@@ -77,17 +84,31 @@ def extract_bq_to_gcs(
     # === END TESTING BLOCK ===
 
     # === PRODUCTION: Uncomment below and delete testing block above ===
-    table = bigquery.table.Table(
-        table_ref=f"{bq_project_id}.{bq_dataset_id}.{bq_table_id}"
-    )
-    job_config = bigquery.job.ExtractJobConfig(destination_format="PARQUET")
+
+    # 1. Create a filtered temporary table
+    temp_table_id = f"{bq_project_id}.{bq_dataset_id}._temp"
+    batch_ids_str = ", ".join(str(id) for id in experiment_batch_ids)
+
+    query = f"""
+        CREATE OR REPLACE TABLE `{temp_table_id}` AS
+        SELECT *
+        FROM `{bq_project_id}.{bq_dataset_id}.{bq_table_id}`
+        WHERE experiment_batch IN ({batch_ids_str})
+    """
+    query_job = client.query(query)
+    query_job.result()
+
+    # 2. Export filtered table to GCS
+    job_config = bigquery.ExtractJobConfig(destination_format="PARQUET")
+
     # Use wildcard to shard output into multiple files for large tables
-    destination_uri = raw_data.uri.rstrip('/') + "/data-*.parquet"
+    destination_uri = raw_data.uri.rstrip("/") + "/data-*.parquet"
     extract_job = client.extract_table(
-        table,
+        temp_table_id,
         destination_uri,
         job_config=job_config,
     )
+
     # === END PRODUCTION BLOCK ===
 
     try:
@@ -96,5 +117,4 @@ def extract_bq_to_gcs(
     except Exception as e:
         logging.error(e)
         logging.error(extract_job.error_result)
-        logging.error(extract_job.errors)
         raise e

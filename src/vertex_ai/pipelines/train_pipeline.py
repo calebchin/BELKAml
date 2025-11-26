@@ -1,12 +1,12 @@
+from typing import List, Optional
+
 from kfp.v2.dsl import pipeline
 
 from vertex_ai.components.ingest import extract_bq_to_gcs
 from vertex_ai.components.preprocess import preprocess_gcs
 from vertex_ai.components.split import split_train_val_test_gcs
-from vertex_ai.components.train import train_model
 from vertex_ai.components.test import test_model
-
-from typing import Optional
+from vertex_ai.components.train import train_model
 
 # https://github.com/GoogleCloudPlatform/vertex-pipelines-end-to-end-samples/blob/main/pipelines/src/pipelines/xgboost/training/pipeline.py
 #
@@ -38,6 +38,9 @@ def train_pipeline(
     aip_project_location: str,
     stratify_column: Optional[str],
     target_column: str,
+    experiment_batch_ids: List[
+        int
+    ],  # input field in the Vertex AI Console (UI) accepts either 1,2,3 or [1, 2, 3]
 ):
     # Step 1: Ingest
     ingest_task = extract_bq_to_gcs(
@@ -45,14 +48,15 @@ def train_pipeline(
         bq_project_location=bq_project_location,
         bq_dataset_id=bq_dataset_id,
         bq_table_id=bq_table_id,
+        experiment_batch_ids=experiment_batch_ids,
     )
 
     # Step 2: Preprocess (includes tokenization and ECFP computation)
     # Uses default vocab_gcs_path and max_length from component
     preprocess_task = preprocess_gcs(raw_data=ingest_task.outputs["raw_data"])
     # Set memory for preprocessing with chunked processing
-    preprocess_task.set_memory_limit('32G')
-    preprocess_task.set_cpu_limit('16')
+    preprocess_task.set_memory_limit("32G")
+    preprocess_task.set_cpu_limit("16")
 
     # Step 3: Split (train/val only, test data is separate)
     split_task = split_train_val_test_gcs(
@@ -62,8 +66,8 @@ def train_pipeline(
         stratify_column=stratify_column,
     )
     # Set memory for splitting large datasets
-    split_task.set_memory_limit('32G')
-    split_task.set_cpu_limit('16')
+    split_task.set_memory_limit("32G")
+    split_task.set_cpu_limit("16")
 
     # Step 4: Train
     # Training parameters are loaded from config file in GCS: gs://belkamlbucket/configs/vertex_train_config.yaml
@@ -74,8 +78,8 @@ def train_pipeline(
         target_column=target_column,
     )
     # Set higher memory for model training
-    train_task.set_memory_limit('32G')
-    train_task.set_cpu_limit('8')
+    train_task.set_memory_limit("32G")
+    train_task.set_cpu_limit("8")
 
     # Step 5: Test
     test_task = test_model(
@@ -84,9 +88,8 @@ def train_pipeline(
         batch_size=1024,
         target_column=target_column,
     )
-    test_task.set_memory_limit('32G')
-    test_task.set_cpu_limit('8')
-
+    test_task.set_memory_limit("32G")
+    test_task.set_cpu_limit("8")
 
     # Model artifacts are automatically saved to GCS by KFP at:
     # gs://belkaml_pipeline_artifacts/{pipeline_run_id}/train-model_{task_id}/model/model.pt
