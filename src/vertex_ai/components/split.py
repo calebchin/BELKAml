@@ -4,7 +4,7 @@ from typing import Optional
 
 @component(
     base_image="python:3.12",
-    packages_to_install=["pandas", "scikit-learn", "pyarrow"],
+    packages_to_install=["pandas", "ray[data]", "pyarrow"],
 )
 def split_train_val_test_gcs(
     data: Input[Dataset],
@@ -48,69 +48,120 @@ def split_train_val_test_gcs(
     - When test_size>0.0, performs train/val/test split
 
     """
-    import pandas as pd
-    from sklearn.model_selection import train_test_split
+    import ray
+    import logging 
     from pathlib import Path
-    import logging
+    ray.init(ignore_reinit_error=True)
+    ds = ray.data.read_parquet(data.path)
 
-    data_path = Path(data.path)
-    if data_path.is_dir():
-        # Read all Parquet files in directory (from sharded BQ export)
-        df = pd.read_parquet(data_path)
-        output_format = "parquet"
-    elif data_path.suffix == ".parquet":
-        df = pd.read_parquet(data_path)
-        output_format = "parquet"
-    elif data_path.suffix == ".csv":
-        df = pd.read_csv(data_path)
-        output_format = "csv"
-    else:
-        raise ValueError(f"Unsupported file format: {data_path.suffix}")
-
-    # If test_size is 0, skip test split and only do train/val
-    if test_size > 0.0:
-        # Three-way split: train, val, test
-        train_val_df, test_df = train_test_split(
-            df,
-            test_size=test_size,
-            stratify=df[stratify_column] if stratify_column else None,
-            random_state=random_state,
-        )
-
-        val_relative_size = val_size / (1 - test_size)
-        train_df, val_df = train_test_split(
-            train_val_df,
-            test_size=val_relative_size,
-            stratify=train_val_df[stratify_column] if stratify_column else None,
-            random_state=random_state,
-        )
-
-        splits = [train_df, val_df, test_df]
-        outputs = [train_data, val_data, test_data]
-    else:
-        # Two-way split: train, val only (test data is separate)
-        train_df, val_df = train_test_split(
-            df,
-            test_size=val_size,
-            stratify=df[stratify_column] if stratify_column else None,
-            random_state=random_state,
-        )
-
-        # Create empty dataframe for test_data output (required by KFP signature)
-        test_df = pd.DataFrame()
-
-        splits = [train_df, val_df, test_df]
-        outputs = [train_data, val_data, test_data]
-
-    for split_df, split_data in zip(splits, outputs):
-        split_dir = Path(split_data.path)
-        split_dir.mkdir(parents=True, exist_ok=True)
-
-        if output_format == "parquet":
-            file_path = split_dir / "data.parquet"
-            split_df.to_parquet(file_path, index=False)
+    if stratify_column is None:
+        logging.info("Splitting into train/val sets...")
+        ds = ds.random_shuffle(seed=random_state)
+        if test_size > 0:
+            train_size = 1 - test_size - val_size
+            train_ds, val_ds, train_ds = ds.split_proportionately([train_size, val_size])
         else:
-            file_path = split_dir / "data.csv"
-            split_df.to_csv(file_path, index=False)
+            train_ds, val_ds = ds.split_proportionately([ 1 - val_size])
+            test_ds = None
+    else:
+        logging.info(f"Stratified split on column {stratify_column}...")
+        if test_size > 0:
+            train_val_ds, test_ds = ds.train_test_split(
+                test_size=test_size,
+                stratify=stratify_column,
+                seed=random_state,
+                shuffle=True
+            )
+            relative_val_size = val_size / (1 - test_size)
+            train_ds, val_ds = train_val_ds.train_test_split(
+                test_size=relative_val_size,
+                stratify=stratify_column,
+                seed=random_state,
+                shuffle=True
+            )
+        else:
+            train_ds, val_ds = ds.train_test_split(
+                test_size=val_size,
+                stratify=stratify_column,
+                seed=random_state,
+                shuffle=True
+            )
+            test_ds = None
 
-        logging.info(f"Dataset saved to GCS at {file_path} ({len(split_df)} rows)")
+        logging.info("Writing split data out...")
+        train_ds.write_parquet(train_data.path)
+        val_ds.write_parquet(val_data.path)
+        if test_ds:
+            test_ds.write_parquet(test_data.path)
+        else:
+            Path(test_data.path).mkdir(parents=True, exist_ok=True)
+            ray.data.from_items([]).write_parquet(test_data.path)
+
+
+    
+    # import pandas as pd
+    # from sklearn.model_selection import train_test_split
+    # from pathlib import Path
+    # import logging
+
+    # data_path = Path(data.path)
+    # if data_path.is_dir():
+    #     # Read all Parquet files in directory (from sharded BQ export)
+    #     df = pd.read_parquet(data_path)
+    #     output_format = "parquet"
+    # elif data_path.suffix == ".parquet":
+    #     df = pd.read_parquet(data_path)
+    #     output_format = "parquet"
+    # elif data_path.suffix == ".csv":
+    #     df = pd.read_csv(data_path)
+    #     output_format = "csv"
+    # else:
+    #     raise ValueError(f"Unsupported file format: {data_path.suffix}")
+
+    # # If test_size is 0, skip test split and only do train/val
+    # if test_size > 0.0:
+    #     # Three-way split: train, val, test
+    #     train_val_df, test_df = train_test_split(
+    #         df,
+    #         test_size=test_size,
+    #         stratify=df[stratify_column] if stratify_column else None,
+    #         random_state=random_state,
+    #     )
+
+    #     val_relative_size = val_size / (1 - test_size)
+    #     train_df, val_df = train_test_split(
+    #         train_val_df,
+    #         test_size=val_relative_size,
+    #         stratify=train_val_df[stratify_column] if stratify_column else None,
+    #         random_state=random_state,
+    #     )
+
+    #     splits = [train_df, val_df, test_df]
+    #     outputs = [train_data, val_data, test_data]
+    # else:
+    #     # Two-way split: train, val only (test data is separate)
+    #     train_df, val_df = train_test_split(
+    #         df,
+    #         test_size=val_size,
+    #         stratify=df[stratify_column] if stratify_column else None,
+    #         random_state=random_state,
+    #     )
+
+    #     # Create empty dataframe for test_data output (required by KFP signature)
+    #     test_df = pd.DataFrame()
+
+    #     splits = [train_df, val_df, test_df]
+    #     outputs = [train_data, val_data, test_data]
+
+    # for split_df, split_data in zip(splits, outputs):
+    #     split_dir = Path(split_data.path)
+    #     split_dir.mkdir(parents=True, exist_ok=True)
+
+    #     if output_format == "parquet":
+    #         file_path = split_dir / "data.parquet"
+    #         split_df.to_parquet(file_path, index=False)
+    #     else:
+    #         file_path = split_dir / "data.csv"
+    #         split_df.to_csv(file_path, index=False)
+
+    #     logging.info(f"Dataset saved to GCS at {file_path} ({len(split_df)} rows)")

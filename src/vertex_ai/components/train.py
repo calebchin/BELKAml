@@ -109,11 +109,11 @@ def train_model(
     print(f"Downloaded vocab.txt to {vocab_local_path}")
 
     # --- 3. Load data from GCS artifacts ---
-    print(f"Loading training data from {train_data.path}")
-    print(f"Loading validation data from {val_data.path}")
+    # print(f"Loading training data from {train_data.path}")
+    # print(f"Loading validation data from {val_data.path}")
 
-    # Note: Datasets will be created per-mode in the training loop
-    # since different modes require different target formats
+    # # Note: Datasets will be created per-mode in the training loop
+    # # since different modes require different target formats
 
     # --- 4. Initialize model ---
     print(f"Initializing Belka model in {mode} mode...")
@@ -141,7 +141,7 @@ def train_model(
     checkpoint_dir = Path(model.path)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_checkpoint(mode, epoch, val_loss):
+    def save_checkpoint(mode, epoch, val_loss) -> Path:
         """Save model checkpoint to GCS artifact directory"""
         checkpoint_name = f"{model_name}_{mode}_{epoch:03d}_{val_loss:.4f}.pt"
         checkpoint_path = checkpoint_dir / checkpoint_name

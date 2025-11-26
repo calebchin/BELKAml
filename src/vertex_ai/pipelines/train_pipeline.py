@@ -63,7 +63,7 @@ def train_pipeline(
     )
     # Set memory for splitting large datasets
     split_task.set_memory_limit('32G')
-    split_task.set_cpu_limit('4')
+    split_task.set_cpu_limit('16')
 
     # Step 4: Train
     # Training parameters are loaded from config file in GCS: gs://belkamlbucket/configs/vertex_train_config.yaml
@@ -84,6 +84,9 @@ def train_pipeline(
         batch_size=1024,
         target_column=target_column,
     )
+    test_task.set_memory_limit('32G')
+    test_task.set_cpu_limit('8')
+
 
     # Model artifacts are automatically saved to GCS by KFP at:
     # gs://belkaml_pipeline_artifacts/{pipeline_run_id}/train-model_{task_id}/model/model.pt

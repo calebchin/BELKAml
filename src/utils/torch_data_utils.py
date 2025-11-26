@@ -180,26 +180,27 @@ class BelkaDataset(Dataset):
         """
         # Read full parquet file
         df = pd.read_parquet(parquet_path)
+        self.data = df 
 
-        # Create train/val split using numpy Generator
-        rng = np.random.default_rng(seed)
-        total_rows = len(df)
-        val_size = int(total_rows * val_split)
+        # # Create train/val split using numpy Generator
+        # rng = np.random.default_rng(seed)
+        # total_rows = len(df)
+        # val_size = int(total_rows * val_split)
 
-        # Shuffle indices
-        indices = rng.permutation(total_rows)
+        # # Shuffle indices
+        # indices = rng.permutation(total_rows)
 
-        # Split indices
-        val_indices = indices[:val_size]
-        train_indices = indices[val_size:]
+        # # Split indices
+        # val_indices = indices[:val_size]
+        # train_indices = indices[val_size:]
 
-        # Select subset
-        if subset == "train":
-            self.data = df.iloc[train_indices].reset_index(drop=True)
-        elif subset == "val":
-            self.data = df.iloc[val_indices].reset_index(drop=True)
-        else:
-            raise ValueError(f"subset must be 'train' or 'val', got {subset}")
+        # # Select subset
+        # if subset == "train":
+        #     self.data = df.iloc[train_indices].reset_index(drop=True)
+        # elif subset == "val":
+        #     self.data = df.iloc[val_indices].reset_index(drop=True)
+        # else:
+        #     raise ValueError(f"subset must be 'train' or 'val', got {subset}")
 
         # Store training mode
         self.mode = mode
