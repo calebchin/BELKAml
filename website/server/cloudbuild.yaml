@@ -15,7 +15,7 @@ steps:
         '--runtime', 'nodejs22',        # choose: nodejs18, nodejs20, python, go, etc.
         '--entry-point', 'handler',     # the exported function name
         '--trigger-http',
-        '--allow-unathenticated'
+        '--allow-unauthenticated'
       ]
 
 options:
