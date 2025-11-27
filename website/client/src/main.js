@@ -6,7 +6,8 @@ $(function () {
       molecule: { required: true },
       protein: { required: true },
     },
-    submitHandler: async function (form) {
+    submitHandler: async function (form, event) {
+      event.preventDefault();
       // This only executes when form is VALID
       const payload = {
         molecule: $("#molecule").val(),
