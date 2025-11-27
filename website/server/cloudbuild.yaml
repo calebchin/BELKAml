@@ -5,14 +5,17 @@ steps:
 
   # Deploy to Cloud Run Functions
   - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: gcloud
     args:
       [
-        'run', 'deploy', 'website-server-reverse-proxy',
+        'functions', 'deploy', 'website-server-reverse-proxy',
+        '--gen2',
         '--source', '.',                # deploy source directory
         '--region', 'us-central1',      # your region
-        '--platform', 'functions',      # IMPORTANT: tells gcloud it's a Cloud Run Function
         '--runtime', 'nodejs22',        # choose: nodejs18, nodejs20, python, go, etc.
-        '--entry-point', 'handler'      # the exported function name
+        '--entry-point', 'handler',     # the exported function name
+        '--trigger-http',
+        '--allow-unathenticated'
       ]
 
 options:
