@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BELKAml</title>
+
+    <link href="./src/style.css" rel="stylesheet" />
+  </head>
+  <body>
+    <main>
+      <div id="container-top">
+        <img id="logo" src="/icons/icon.png" />
+        <h1 id="title">BELKAml</h1>
+        <div id="description">
+          Use state-of-the-art machine learning to predict the binding affinity of small molecules
+          to proteins.
+        </div>
+      </div>
+
+      <div id="container-bottom">
+        <div class="p1">
+          <form id="belkaml-form" action="#">
+            <div class="input-container">
+              <label for="molecule">Molecule</label>
+              <input
+                id="molecule"
+                name="molecule"
+                type="text"
+                placeholder="CC(=O)OC1=CC=CC=C1C(=O)O"
+                required
+              />
+            </div>
+
+            <div class="input-container">
+              <label for="protein">Protein</label>
+              <select name="protein" id="protein">
+                <option value="HSA">HSA</option>
+                <option value="sEH">sEH</option>
+                <option value="BRD4">BRD4</option>
+              </select>
+            </div>
+
+            <div class="submit-container">
+              <button id="btn-predict" type="submit">
+                <span class="btn-text">Predict</span>
+                <span class="btn-spinner"></span>
+              </button>
+            </div>
+          </form>
+        </div>
+        <div class="p2 hidden">
+          <div class="container">
+            <div id="binding-probability-container">
+              <div id="binding-probability-display">0.67</div>
+              <div class="label">Binding Probability</div>
+            </div>
+            <div>
+              <div id="molecule-display">CN(C)CCOC(C1=CC=CC=C1)C1=CC=CC=C1</div>
+              <div class="label">Molecule</div>
+            </div>
+            <div>
+              <div id="protein-display">HSA</div>
+              <div class="label">Protein</div>
+            </div>
+            <button id="btn-back">Back</button>
+          </div>
+        </div>
+      </div>
+    </main>
+    <script
+      src="https://code.jquery.com/jquery-3.7.1.min.js"
+      integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+      crossorigin="anonymous"
+    ></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.5/jquery.validate.min.js"></script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

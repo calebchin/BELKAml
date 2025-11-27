@@ -3,7 +3,7 @@ name: Deploy Frontend to GCS
 on:
   push:
     tags:
-    - 'deploy-web-*'   # runs whenever you push a tag like deploy-web-v123
+    - 'website-client-v*'   # runs whenever you push a tag like website-client-v1.2.3
 
 jobs:
   build-and-deploy:

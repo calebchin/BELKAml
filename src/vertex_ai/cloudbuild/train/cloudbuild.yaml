@@ -27,7 +27,7 @@ steps:
 # Step 4: Upload compiled pipeline YAML to GCS
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'gsutil'
-  args: ['cp', 'src/vertex_ai/train_pipeline.yaml', 'gs://belkaml_pipeline_artifacts/train_pipeline_with_untested_batch_selection.yaml']
+  args: ['cp', 'src/vertex_ai/train_pipeline.yaml', 'gs://belkaml_pipeline_artifacts/train_pipeline.yaml']
 
 # Step 5 (OPTIONAL): Automatically trigger pipeline run
 # Uncomment the step below to enable automatic pipeline execution after deployment

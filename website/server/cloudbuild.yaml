@@ -1,0 +1,20 @@
+steps:
+  # Install dependencies
+  - name: 'gcr.io/cloud-builders/npm'
+    args: ['install']
+
+  # Deploy to Cloud Run Functions
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      [
+        'run', 'deploy', 'website-server-reverse-proxy',
+        '--source', '.',                # deploy source directory
+        '--region', 'us-central1',      # your region
+        '--platform', 'functions',      # IMPORTANT: tells gcloud it's a Cloud Run Function
+        '--runtime', 'nodejs22',        # choose: nodejs18, nodejs20, python, go, etc.
+        '--entry-point', 'handler'      # the exported function name
+      ]
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+

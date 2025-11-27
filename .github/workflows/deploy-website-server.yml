@@ -1,0 +1,33 @@
+name: Deploy Backend to Cloud Run Functions
+
+on:
+  push:
+    tags:
+    - 'website-server-v*'   # runs whenever you push a tag like website-server-v1.2.3
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Deploy to Cloud Run Functions
+      run: |
+        gcloud builds submit ./website/server \
+          --config=./website/server/cloudbuild.yaml \
+          --suppress-logs
