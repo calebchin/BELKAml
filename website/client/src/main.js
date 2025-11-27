@@ -1,3 +1,5 @@
+const BACKEND = "https://us-central1-belkaml.cloudfunctions.net/website-server-reverse-proxy";
+
 $(function () {
   $("#belkaml-form").validate({
     rules: {
@@ -31,7 +33,7 @@ $(function () {
       // }, 1500);
 
       try {
-        const res = await fetch("http://localhost:8080/api/binding-probability", {
+        const res = await fetch(`${BACKEND}/api/binding-probability`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
