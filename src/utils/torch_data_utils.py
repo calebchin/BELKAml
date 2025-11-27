@@ -299,3 +299,48 @@ def collate_fn(batch: List[Dict], tokenizer: SMILESTokenizer, max_length: int) -
     encoded_smiles = tokenizer.encode(smiles, max_length=max_length)
 
     return {"smiles": encoded_smiles, "binds": binds, "ecfp": ecfp}
+
+
+class BelkaRawDataset(Dataset):
+    """
+    Dataset class for inference that computes features on-the-fly from raw SMILES.
+    Unlike BelkaDataset (which reads pre-computed parquet), this takes a list of strings.
+    """
+
+    def __init__(self, smiles_list: list, tokenizer: SMILESTokenizer, ecfp_transformer: ECFPFingerprint,
+                 max_length: int = 128):
+        self.smiles_list = smiles_list
+        self.tokenizer = tokenizer
+        self.ecfp = ecfp_transformer
+        self.max_length = max_length
+        # Cache special tokens
+        self.pad_token = self.tokenizer.token_to_id.get("[PAD]", 0)
+        self.unk_token = self.tokenizer.token_to_id.get("[UNK]", 2)
+
+    def __len__(self):
+        return len(self.smiles_list)
+
+    def __getitem__(self, idx):
+        smile = self.smiles_list[idx]
+
+        # 1. Tokenization Logic (Matches preprocess.py)
+        try:
+            tokens = atomInSmiles.smiles_tokenizer(smile)
+            ids = [self.tokenizer.token_to_id.get(t, self.unk_token) for t in tokens]
+            # Truncate/Pad
+            ids = ids[:self.max_length]
+            ids = ids + [self.pad_token] * (self.max_length - len(ids))
+        except Exception:
+            ids = [self.pad_token] * self.max_length
+
+        # 2. ECFP Logic (Matches preprocess.py)
+        try:
+            # transform expects a list
+            fp = self.ecfp.transform([smile])[0]
+        except Exception:
+            fp = np.zeros(2048, dtype=np.float32)
+
+        return {
+            "smiles": torch.tensor(ids, dtype=torch.long),
+            "ecfp": torch.tensor(fp, dtype=torch.float32)
+        }
