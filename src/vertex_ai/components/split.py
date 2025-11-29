@@ -51,7 +51,12 @@ def split_train_val_test_gcs(
     import ray
     import logging 
     from pathlib import Path
-    ray.init(ignore_reinit_error=True)
+    # Initialize Ray with optimized settings for large datasets
+    # Let Ray use default temp dir location (typically /tmp/ray or $HOME/ray)
+    ray.init(
+        ignore_reinit_error=True,
+        object_store_memory=int(0.6 * 32 * 1024 * 1024 * 1024),  # 60% of 32GB for object store
+    )
     ds = ray.data.read_parquet(data.path)
 
     if stratify_column is None:
