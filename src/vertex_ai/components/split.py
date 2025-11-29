@@ -49,38 +49,41 @@ def split_train_val_test_gcs(
 
     """
     import ray
-    import logging 
+    import logging
     from pathlib import Path
+    import os
+
+    # Enable push-based shuffle to reduce driver memory usage (recommended by Ray)
+    os.environ['RAY_DATA_PUSH_BASED_SHUFFLE'] = '1'
+
     # Initialize Ray with optimized settings for large datasets
-    # Let Ray use default temp dir location (typically /tmp/ray or $HOME/ray)
     ray.init(
         ignore_reinit_error=True,
         object_store_memory=int(0.6 * 32 * 1024 * 1024 * 1024),  # 60% of 32GB for object store
     )
+
+    logging.info("Reading and materializing dataset...")
     ds = ray.data.read_parquet(data.path)
 
-    if stratify_column is None:
-        logging.info("Splitting into train/val sets...")
-        ds = ds.random_shuffle(seed=random_state)
-        if test_size > 0:
-            train_size = 1 - test_size - val_size
-            train_ds, val_ds, test_ds = ds.split_proportionately([train_size, val_size])
-        else:
-            train_ds, val_ds = ds.split_proportionately([ 1 - val_size])
-            test_ds = None
+    # Materialize before shuffle to prevent block fusion issues (recommended by Ray)
+    ds = ds.materialize()
+
+    # Note: Stratification is disabled for large datasets to avoid memory/disk overflow
+    # With 59M rows, random split provides good class distribution
+    if stratify_column:
+        logging.warning(f"Ignoring stratify_column='{stratify_column}' for large dataset. "
+                       f"Using random shuffle instead to avoid memory/disk overflow.")
+
+    logging.info("Shuffling dataset...")
+    ds = ds.random_shuffle(seed=random_state)
+
+    logging.info("Splitting dataset...")
+    if test_size > 0:
+        train_size = 1 - test_size - val_size
+        train_ds, val_ds, test_ds = ds.split_proportionately([train_size, val_size])
     else:
-        # Use random split instead of stratified to avoid expensive shuffle operations
-        # Stratified splitting with Ray requires ~189GB for 59M rows due to hash shuffle
-        # Random splitting provides good enough class distribution for large datasets
-        logging.warning(f"Using random split (not stratified by {stratify_column}) to avoid memory overflow. "
-                       f"With large datasets, stratified splitting requires significant memory for shuffle operations.")
-        ds = ds.random_shuffle(seed=random_state)
-        if test_size > 0:
-            train_size = 1 - test_size - val_size
-            train_ds, val_ds, test_ds = ds.split_proportionately([train_size, val_size])
-        else:
-            train_ds, val_ds = ds.split_proportionately([1 - val_size])
-            test_ds = None
+        train_ds, val_ds = ds.split_proportionately([1 - val_size])
+        test_ds = None
 
     logging.info("Writing split data out...")
     train_ds.write_parquet(train_data.path)

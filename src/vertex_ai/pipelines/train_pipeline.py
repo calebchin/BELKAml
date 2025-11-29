@@ -66,7 +66,7 @@ def train_pipeline(
         stratify_column=stratify_column,
     )
     # Set memory for splitting large datasets
-    split_task.set_memory_limit("32G")
+    split_task.set_memory_limit("64G")
     split_task.set_cpu_limit("16")
 
     # Step 4: Train
