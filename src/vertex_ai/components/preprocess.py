@@ -89,10 +89,10 @@ def preprocess_gcs(
 
         def __call__(self, batch: dict) -> dict:
             import atomInSmiles
-            
+
             # Access numpy arrays from the batch
             smiles_list = batch["molecule_smiles"]
-            
+
             token_ids_list = []
             ecfp_list = []
 
@@ -119,8 +119,12 @@ def preprocess_gcs(
                 except Exception:
                     ecfp_list.append(np.zeros(2048, dtype=np.float32))
 
+            # Return new columns plus original columns from batch
             return {
-                "token_ids": token_ids_list, 
+                "molecule_smiles": batch["molecule_smiles"],
+                "protein_name": batch["protein_name"],
+                "binds": batch["binds"],
+                "token_ids": token_ids_list,
                 "ecfp": ecfp_list
             }
     #raw_data_path = Path(raw_data.path)
