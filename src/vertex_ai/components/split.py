@@ -64,25 +64,17 @@ def split_train_val_test_gcs(
             train_ds, val_ds = ds.split_proportionately([ 1 - val_size])
             test_ds = None
     else:
-        logging.info(f"Stratified split on column {stratify_column}...")
+        # Use random split instead of stratified to avoid expensive shuffle operations
+        # Stratified splitting with Ray requires ~189GB for 59M rows due to hash shuffle
+        # Random splitting provides good enough class distribution for large datasets
+        logging.warning(f"Using random split (not stratified by {stratify_column}) to avoid memory overflow. "
+                       f"With large datasets, stratified splitting requires significant memory for shuffle operations.")
+        ds = ds.random_shuffle(seed=random_state)
         if test_size > 0:
-            train_val_ds, test_ds = ds.train_test_split(
-                test_size=test_size,
-                stratify=stratify_column,
-                seed=random_state,
-            )
-            relative_val_size = val_size / (1 - test_size)
-            train_ds, val_ds = train_val_ds.train_test_split(
-                test_size=relative_val_size,
-                stratify=stratify_column,
-                seed=random_state,
-            )
+            train_size = 1 - test_size - val_size
+            train_ds, val_ds, test_ds = ds.split_proportionately([train_size, val_size])
         else:
-            train_ds, val_ds = ds.train_test_split(
-                test_size=val_size,
-                stratify=stratify_column,
-                seed=random_state,
-            )
+            train_ds, val_ds = ds.split_proportionately([1 - val_size])
             test_ds = None
 
     logging.info("Writing split data out...")
