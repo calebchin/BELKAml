@@ -54,7 +54,7 @@ def split_train_val_test_gcs(
     import os
 
     #os.environ['RAY_DATA_PUSH_BASED_SHUFFLE'] = '1'
-
+    ray.data.DataContext.get_current().execution_options.preserve_order = True
     # Initialize Ray with optimized settings for large datasets
     ray.init(
         ignore_reinit_error=True,
@@ -71,14 +71,18 @@ def split_train_val_test_gcs(
                        f"Using random shuffle instead to avoid memory/disk overflow.")
 
     logging.info("Shuffling dataset...")
-    ds = ds.random_shuffle(seed=random_state)
+    #ds = ds.random_shuffle(seed=random_state)
 
     logging.info("Splitting dataset...")
     if test_size > 0:
-        train_size = 1 - test_size - val_size
-        train_ds, val_ds, test_ds = ds.split_proportionately([train_size, val_size])
+        #train_size = 1 - test_size - val_size
+        train_val_ds, test_ds = ds.streaming_train_test_split(test_size, seed=random_state)
+        train_ds, val_ds = train_val_ds.streaming_train_test_split(val_size, seed=random_state)
+
+        #train_ds, val_ds, test_ds = ds.split_proportionately([train_size, val_size])
     else:
-        train_ds, val_ds = ds.split_proportionately([1 - val_size])
+        train_ds, val_ds = ds.streaming_train_test_split(val_size, seed=random_state)
+        #train_ds, val_ds = ds.split_proportionately([1 - val_size])
         test_ds = None
 
     logging.info("Writing split data out...")

@@ -1,5 +1,5 @@
 from kfp.dsl import pipeline
-
+from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 
 from vertex_ai.components.ingest import extract_bq_to_gcs
 from vertex_ai.components.preprocess import preprocess_gcs
