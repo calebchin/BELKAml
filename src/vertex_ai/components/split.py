@@ -59,7 +59,7 @@ def split_train_val_test_gcs(
     # Initialize Ray with optimized settings for large datasets
     ray.init(
         ignore_reinit_error=True,
-        object_store_memory=int(0.6 * 32 * 1024 * 1024 * 1024),  # 60% of 32GB for object store
+        object_store_memory=int(0.6 * 64 * 1024 * 1024 * 1024)  # 60% of 32GB for object store
     )
 
     logging.info("Reading and materializing dataset...")

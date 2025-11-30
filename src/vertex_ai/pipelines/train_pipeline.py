@@ -68,6 +68,7 @@ def train_pipeline(
     # Set memory for splitting large datasets
     split_task.set_memory_limit("64G")
     split_task.set_cpu_limit("16")
+    split_task.set_ephemeral_storage_limit("500G")
 
     # Step 4: Train
     # Training parameters are loaded from config file in GCS: gs://belkamlbucket/configs/vertex_train_config.yaml
