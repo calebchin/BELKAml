@@ -1,5 +1,5 @@
 from google.cloud import aiplatform as aip
-from kfp.v2 import compiler
+from kfp import compiler
 
 from vertex_ai.pipelines.train_pipeline import train_pipeline
 
