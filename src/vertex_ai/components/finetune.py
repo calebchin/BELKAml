@@ -1,5 +1,5 @@
 from kfp.dsl import ClassificationMetrics
-from kfp.v2.dsl import component, Input, Output, Dataset, Model, Metrics
+from kfp.dsl import component, Input, Output, Dataset, Model, Metrics
 
 
 @component(

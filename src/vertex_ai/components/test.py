@@ -1,4 +1,4 @@
-from kfp.v2.dsl import (
+from kfp.dsl import (
     component,
     Input,
     Output,

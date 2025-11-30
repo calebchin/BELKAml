@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from kfp.v2.dsl import pipeline
+from kfp.dsl import pipeline
 
 from vertex_ai.components.ingest import extract_bq_to_gcs
 from vertex_ai.components.preprocess import preprocess_gcs

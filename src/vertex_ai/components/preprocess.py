@@ -1,4 +1,4 @@
-from kfp.v2.dsl import component, Input, Output, Dataset
+from kfp.dsl import component, Input, Output, Dataset
 
 # Rule of thumb: Any feature engineering or preprocessing should be done in the pipeline instead of
 # while ingesting into BigQuery because for live predictions, you need the same feature engineering

@@ -1,6 +1,6 @@
 from typing import List
 
-from kfp.v2.dsl import Dataset, Output, component
+from kfp.dsl import Dataset, Output, component
 
 
 @component(

@@ -1,4 +1,4 @@
-from kfp.v2.dsl import component, Input, Model, Metrics
+from kfp.dsl import component, Input, Model, Metrics
 
 
 @component(base_image="python:3.12", packages_to_install=["google-cloud-aiplatform"])
