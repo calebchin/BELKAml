@@ -41,7 +41,8 @@ dependencies = [
     "kfp>=2.14.6",
     "google-cloud-bigquery",
     "pyyaml",
-    "ray"
+    "ray",
+    "google-cloud-pipeline-components"
 ]
 
 [project.optional-dependencies]
