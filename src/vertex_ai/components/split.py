@@ -1,3 +1,7 @@
+from kfp.dsl import component, Input, Output, Dataset
+from typing import Optional
+
+
 @component(
     base_image="python:3.12",
     packages_to_install=["pandas", "ray[data]", "pyarrow"],
@@ -7,39 +11,66 @@ def split_train_val_test_gcs(
     train_data: Output[Dataset],
     val_data: Output[Dataset],
     test_data: Output[Dataset],
-    test_size: float = 0.0,
+    test_size: float = 0.0,  # Changed default to 0.0 (no test split by default)
     val_size: float = 0.1,
     stratify_column: Optional[str] = None,
     random_state: int = 42,
-    mem_size_gb: int = 64, # Pass this in from pipeline definition
 ) -> None:
+    """Splits a dataset into train, validation, and optionally test sets.
+
+    Parameters
+    ----------
+    data : Input[Dataset]
+        The preprocessed dataset artifact (CSV or Parquet) to split.
+    train_data : Output[Dataset]
+        Output artifact for the training subset.
+    val_data : Output[Dataset]
+        Output artifact for the validation subset.
+    test_data : Output[Dataset]
+        Output artifact for the test subset (only created if test_size > 0).
+    test_size : float, optional
+        Fraction of data to allocate to the test set (default 0.0 = no test split).
+    val_size : float, optional
+        Fraction of the remaining data to allocate to the validation set (default 0.1).
+    stratify_column : str, optional
+        Column name to use for stratified splitting (useful for classification tasks).
+    random_state : int, optional
+        Random seed for reproducibility (default 42).
+
+    Returns
+    -------
+    None
+        The train, validation, and optionally test sets are saved as separate output artifacts on GCS.
+
+    Notes
+    -----
+    - When test_size=0.0, only train/val split is performed (test data will be separate)
+    - When test_size>0.0, performs train/val/test split
+
+    """
     import ray
     import logging
     from pathlib import Path
     import os
 
-    # 2. Dynamic Memory Calculation
-    # Convert GB to bytes. Ray usually needs a lot of object store memory.
-    object_store_memory = int(0.6 * mem_size_gb * 1024 * 1024 * 1024)
-    
+    #os.environ['RAY_DATA_PUSH_BASED_SHUFFLE'] = '1'
+
+    # Initialize Ray with optimized settings for large datasets
     ray.init(
         ignore_reinit_error=True,
-        object_store_memory=object_store_memory,
-        # storage="/tmp/ray" # Explicitly ensure spilling goes to the boot disk
+        object_store_memory=int(0.6 * 64 * 1024 * 1024 * 1024)  # 60% of 32GB for object store
     )
 
-    logging.info("Reading dataset...")
-    # Lazy read - does not load data yet
+    logging.info("Reading and materializing dataset...")
     ds = ray.data.read_parquet(data.path)
 
-    # 3. REMOVED: ds = ds.materialize()
-    # This was doubling your storage requirement (Input Copy + Shuffled Copy).
-    
+    #ds = ds.materialize()
+
     if stratify_column:
-        logging.warning(f"Ignoring stratify_column='{stratify_column}'...")
+        logging.warning(f"Ignoring stratify_column='{stratify_column}' for large dataset. "
+                       f"Using random shuffle instead to avoid memory/disk overflow.")
 
     logging.info("Shuffling dataset...")
-    # random_shuffle will trigger the read and spill to disk as needed.
     ds = ds.random_shuffle(seed=random_state)
 
     logging.info("Splitting dataset...")
@@ -53,7 +84,6 @@ def split_train_val_test_gcs(
     logging.info("Writing split data out...")
     train_ds.write_parquet(train_data.path)
     val_ds.write_parquet(val_data.path)
-    
     if test_ds:
         test_ds.write_parquet(test_data.path)
     else:
