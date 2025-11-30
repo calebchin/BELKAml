@@ -2,6 +2,8 @@ from typing import List, Optional
 
 from kfp.dsl import pipeline
 
+from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
+
 from vertex_ai.components.ingest import extract_bq_to_gcs
 from vertex_ai.components.preprocess import preprocess_gcs
 from vertex_ai.components.split import split_train_val_test_gcs
@@ -59,16 +61,34 @@ def train_pipeline(
     preprocess_task.set_cpu_limit("16")
 
     # Step 3: Split (train/val only, test data is separate)
-    split_task = split_train_val_test_gcs(
-        data=preprocess_task.outputs["data"],
-        test_size=0.1,  # No test split (test data is separate)
-        val_size=0.1,
-        stratify_column=stratify_column,
-    )
+    # split_task = split_train_val_test_gcs(
+    #     data=preprocess_task.outputs["data"],
+    #     test_size=0.1,  # No test split (test data is separate)
+    #     val_size=0.1,
+    #     stratify_column=stratify_column,
+    # )
     # Set memory for splitting large datasets
-    split_task.set_memory_limit("64G")
-    split_task.set_cpu_limit("16")
-    split_task.set_ephemeral_storage_limit("500G")
+    # split_task.set_memory_limit("64G")
+    # split_task.set_cpu_limit("16")
+    # split_task.set_ephemeral_storage_limit("500G")
+    split_op = create_custom_training_job_from_component(
+        component_spec=split_train_val_test_gcs,
+        display_name="split-dataset-large-disk",
+        machine_type="e2-standard-16", 
+        boot_disk_type="pd-ssd",          
+        boot_disk_size_gb=500             
+    )
+
+    # 2. RUN the new op
+    # Note: We remove .set_memory_limit/.set_cpu_limit because 
+    # the 'machine_type' above already handles that.
+    split_task = split_op(
+        data=preprocess_task.outputs["data"],
+        test_size=0.1,
+        val_size=0.1,
+        stratify_column=stratify_column
+    )
+
 
     # Step 4: Train
     # Training parameters are loaded from config file in GCS: gs://belkamlbucket/configs/vertex_train_config.yaml

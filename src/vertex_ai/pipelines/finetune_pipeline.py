@@ -1,5 +1,6 @@
 from kfp.dsl import pipeline
 
+
 from vertex_ai.components.ingest import extract_bq_to_gcs
 from vertex_ai.components.preprocess import preprocess_gcs
 from vertex_ai.components.split import split_train_val_test_gcs
@@ -69,15 +70,23 @@ def finetune_pipeline(
     preprocess_task.set_cpu_limit('8')
 
     # Step 3: Split
-    split_task = split_train_val_test_gcs(
+    split_op = create_custom_training_job_from_component(
+        component_spec=split_train_val_test_gcs,
+        display_name="split-dataset-large-disk",
+        machine_type="e2-standard-16",    # 16 vCPUs, ~64GB RAM
+        boot_disk_type="pd-ssd",          # SSD is much faster for Ray shuffling
+        boot_disk_size_gb=500             # <--- THE FIX: Request 500GB
+    )
+
+    # 2. RUN the new op
+    # Note: We remove .set_memory_limit/.set_cpu_limit because 
+    # the 'machine_type' above already handles that.
+    split_task = split_op(
         data=preprocess_task.outputs["data"],
         test_size=0.1,
         val_size=0.1,
-        stratify_column=stratify_column,
+        stratify_column=stratify_column
     )
-    # Set memory for splitting large datasets
-    split_task.set_memory_limit('16G')
-    split_task.set_cpu_limit('4')
 
     # Step 4: Fine-tune (instead of training from scratch)
     finetune_task = finetune_model(
