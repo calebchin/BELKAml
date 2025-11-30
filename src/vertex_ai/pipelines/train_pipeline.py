@@ -76,7 +76,7 @@ def train_pipeline(
         display_name="split-dataset-large-disk",
         machine_type="e2-standard-16", 
         boot_disk_type="pd-ssd",          
-        boot_disk_size_gb=500             
+        boot_disk_size_gb=1000             
     )
 
     # 2. RUN the new op
