@@ -98,8 +98,8 @@ def train_pipeline(
         config_path="gs://belkamlbucket/configs/vertex_train_config.yaml",
         target_column=target_column,
     )
-    # Set higher memory for model training
-    train_task.set_memory_limit("32G")
+
+    train_task.set_memory_limit("64G")
     train_task.set_cpu_limit("8")
     train_task.set_accelerator_type("NVIDIA_L4")
     train_task.set_accelerator_limit(1)
@@ -111,7 +111,7 @@ def train_pipeline(
         batch_size=1024,
         target_column=target_column,
     )
-    test_task.set_memory_limit("32G")
+    test_task.set_memory_limit("64G")
     test_task.set_cpu_limit("8")
     test_task.set_accelerator_type("NVIDIA_L4")
     test_task.set_accelerator_limit(1)

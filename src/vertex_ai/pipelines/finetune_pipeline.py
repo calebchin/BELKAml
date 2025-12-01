@@ -99,7 +99,7 @@ def finetune_pipeline(
         target_column=target_column,
     )
     # Set higher memory for fine-tuning
-    finetune_task.set_memory_limit('32G')
+    finetune_task.set_memory_limit('64G')
     finetune_task.set_cpu_limit('8')
     finetune_task.set_accelerator_type("NVIDIA_L4")
     finetune_task.set_accelerator_limit(1)
@@ -111,6 +111,10 @@ def finetune_pipeline(
         batch_size=1024,
         target_column=target_column,
     )
+    test_task.set_memory_limit('64G')
+    test_task.set_cpu_limit('8')
+    test_task.set_accelerator_type("NVIDIA_L4")
+    test_task.set_accelerator_limit(1)
 
     # Model artifacts are automatically saved to GCS by KFP at:
     # gs://belkaml_pipeline_artifacts/{pipeline_run_id}/finetune-model_{task_id}/model/model.pt
