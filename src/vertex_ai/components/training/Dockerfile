@@ -1,5 +1,5 @@
-FROM python:3.12-slim
-
+# FROM python:3.12-slim
+FROM us-docker.pkg.dev/deeplearning-platform-release/gcr.io/pytorch-cu124.2-4.py310:latest
 # Install system dependencies for RDKit and other scientific packages
 RUN apt-get update && apt-get install -y \
     build-essential \

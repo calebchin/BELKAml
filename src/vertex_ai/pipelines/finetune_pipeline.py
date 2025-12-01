@@ -101,6 +101,8 @@ def finetune_pipeline(
     # Set higher memory for fine-tuning
     finetune_task.set_memory_limit('32G')
     finetune_task.set_cpu_limit('8')
+    finetune_task.set_accelerator_type("NVIDIA_L4")
+    finetune_task.set_accelerator_limit(1)
 
     # Step 5: Test
     test_task = test_model(
