@@ -99,7 +99,7 @@ def train_pipeline(
         target_column=target_column,
     )
 
-    train_task.set_memory_limit("64G")
+    train_task.set_memory_limit("128G")
     train_task.set_cpu_limit("8")
     train_task.set_accelerator_type("NVIDIA_L4")
     train_task.set_accelerator_limit(1)
@@ -111,7 +111,7 @@ def train_pipeline(
         batch_size=1024,
         target_column=target_column,
     )
-    test_task.set_memory_limit("64G")
+    test_task.set_memory_limit("128G")
     test_task.set_cpu_limit("8")
     test_task.set_accelerator_type("NVIDIA_L4")
     test_task.set_accelerator_limit(1)
