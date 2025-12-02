@@ -99,10 +99,10 @@ def train_pipeline(
         target_column=target_column,
     )
 
-    train_task.set_memory_limit("256G")
-    train_task.set_cpu_limit("8")
+    train_task.set_memory_limit("185G")
+    train_task.set_cpu_limit("48")
     train_task.set_accelerator_type("NVIDIA_L4")
-    train_task.set_accelerator_limit(2)
+    train_task.set_accelerator_limit(4)
 
     # Step 5: Test
     test_task = test_model(
@@ -111,10 +111,10 @@ def train_pipeline(
         batch_size=1024,
         target_column=target_column,
     )
-    test_task.set_memory_limit("128G")
-    test_task.set_cpu_limit("8")
+    test_task.set_memory_limit("185G")
+    test_task.set_cpu_limit("48")
     test_task.set_accelerator_type("NVIDIA_L4")
-    test_task.set_accelerator_limit(1)
+    test_task.set_accelerator_limit(4)
 
     # Model artifacts are automatically saved to GCS by KFP at:
     # gs://belkaml_pipeline_artifacts/{pipeline_run_id}/train-model_{task_id}/model/model.pt
