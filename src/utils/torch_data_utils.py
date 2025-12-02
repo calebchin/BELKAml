@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 
 # import torch.nn as nn
-from torch.utils.data import Dataset  # , DataLoader
+from torch.utils.data import Dataset, IterableDataset
 from sklearn.model_selection import train_test_split
 import os
 from typing import List, Dict
@@ -21,6 +21,7 @@ from rdkit import Chem
 import atomInSmiles
 import dask.dataframe as dd
 import pyarrow as pa
+import pyarrow.parquet as pq
 import itertools
 
 
@@ -287,6 +288,141 @@ class BelkaDataset(Dataset):
                 "binds": torch.tensor([binds], dtype=torch.float32),
                 "ecfp": ecfp,
             }
+
+
+class BelkaIterableDataset(IterableDataset):
+    """Memory-efficient PyTorch IterableDataset for BELKA parquet data.
+
+    Streams data from parquet files using PyArrow, avoiding loading entire dataset into memory.
+    Each DataLoader worker reads different row groups for parallel processing.
+
+    Expects parquet with columns:
+    - token_ids (list of ints): Pre-computed tokenized SMILES
+    - ecfp (list of floats): Pre-computed ECFP fingerprint (2048-dim)
+    - binds (int): Binary binding label (0 or 1)
+    """
+
+    def __init__(self, parquet_path: str, vocab_path: str = None,
+                 max_length: int = 128, mode: str = "clf"):
+        """Initialize BelkaIterableDataset.
+
+        Args:
+            parquet_path: Path to parquet file (local or GCS)
+            vocab_path: Path to vocabulary file (for MLM vocab_size)
+            max_length: Maximum sequence length
+            mode: Training mode - 'mlm', 'fps', or 'clf' (default: 'clf')
+        """
+        self.parquet_path = parquet_path
+        self.mode = mode
+        self.max_length = max_length
+
+        # Initialize tokenizer only for vocab_size (needed for MLM random token selection)
+        if vocab_path:
+            self.tokenizer = SMILESTokenizer(vocab_path)
+            self.vocab_size = len(self.tokenizer.token_to_id)
+        else:
+            self.tokenizer = None
+            self.vocab_size = None
+
+    def _apply_mlm_masking(self, token_ids: torch.Tensor, mask_prob: float = 0.15) -> tuple:
+        """Apply BERT-style random masking for MLM training.
+
+        Args:
+            token_ids: Token IDs tensor of shape (seq_len,)
+            mask_prob: Probability of masking each token (default: 0.15)
+
+        Returns:
+            masked_ids: Token IDs with masking applied
+            targets: Shape (seq_len, 2) where [:, 0] = positions to predict, [:, 1] = original tokens
+        """
+        seq_len = token_ids.shape[0]
+
+        # Create mask: 1 where we will mask, 0 otherwise
+        # Don't mask [PAD] tokens (id=0) or special tokens
+        mask = (torch.rand(seq_len) < mask_prob) & (token_ids > 2)  # Skip [PAD], [MASK], [UNK]
+
+        # Create targets (seq_len, 2)
+        targets = torch.zeros((seq_len, 2), dtype=torch.long)
+        targets[:, 0] = -1  # Initialize all as "not masked"
+        targets[:, 1] = token_ids  # Original tokens for frequency weighting
+
+        # For masked positions: set target to original token
+        targets[mask, 0] = token_ids[mask]
+
+        # Create masked input
+        masked_ids = token_ids.clone()
+
+        if mask.sum() > 0:
+            # 80% → [MASK], 10% → random, 10% → keep original
+            mask_type = torch.rand((int(mask.sum().item()),))
+            mask_positions = torch.where(mask)[0]
+
+            # 80% [MASK] (token ID = 1)
+            mask_mask = mask_positions[mask_type < 0.8]
+            masked_ids[mask_mask] = 1
+
+            # 10% random token (avoid special tokens 0, 1, 2)
+            random_mask = mask_positions[(mask_type >= 0.8) & (mask_type < 0.9)]
+            if len(random_mask) > 0 and self.vocab_size:
+                masked_ids[random_mask] = torch.randint(3, self.vocab_size, (len(random_mask),))
+
+            # 10% keep original (already set)
+
+        return masked_ids, targets
+
+    def _process_row(self, row) -> Dict:
+        """Process a single row from the parquet file."""
+        # Load pre-computed features
+        token_ids = torch.tensor(row["token_ids"], dtype=torch.long)
+        ecfp = torch.tensor(row["ecfp"], dtype=torch.float32)
+        binds = int(row["binds"])
+
+        # Mode-specific processing
+        if self.mode == "mlm":
+            # Apply random masking for MLM training
+            masked_ids, mlm_targets = self._apply_mlm_masking(token_ids)
+            return {
+                "smiles": masked_ids,
+                "binds": mlm_targets,
+                "ecfp": ecfp,
+            }
+        else:
+            # FPS or CLF mode - use pre-computed features as-is
+            return {
+                "smiles": token_ids,
+                "binds": torch.tensor([binds], dtype=torch.float32),
+                "ecfp": ecfp,
+            }
+
+    def __iter__(self):
+        """Iterate over parquet file, streaming row groups."""
+        # Get worker info for distributed reading
+        worker_info = torch.utils.data.get_worker_info()
+
+        # Open parquet file for streaming
+        pf = pq.ParquetFile(self.parquet_path)
+        num_row_groups = pf.num_row_groups
+
+        # Distribute row groups across workers
+        if worker_info is not None:
+            # Multi-worker: each worker processes subset of row groups
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+            row_groups = range(worker_id, num_row_groups, num_workers)
+        else:
+            # Single worker: process all row groups
+            row_groups = range(num_row_groups)
+
+        # Stream row groups
+        for rg_idx in row_groups:
+            # Read one row group at a time (memory efficient)
+            table = pf.read_row_group(rg_idx)
+            df = table.to_pandas()
+
+            # Yield rows one by one
+            for idx in range(len(df)):
+                row = df.iloc[idx]
+                yield self._process_row(row)
 
 
 def collate_fn(batch: List[Dict], tokenizer: SMILESTokenizer, max_length: int) -> Dict:

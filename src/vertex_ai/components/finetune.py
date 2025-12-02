@@ -49,7 +49,7 @@ def finetune_model(
     from model import Belka
     from losses import CategoricalLoss, BinaryLoss, MultiLabelLoss
     from metrics import MaskedAUC
-    from utils.torch_data_utils import BelkaDataset
+    from utils.torch_data_utils import BelkaIterableDataset
     from torch.utils.data import DataLoader
 
     print(f"Using device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
@@ -208,48 +208,37 @@ def finetune_model(
         print(f"Fine-tuning in mode = {mode}")
         print("-" * 20)
 
-        # Create datasets for this mode
-        train_dataset = BelkaDataset(
+        # Create datasets for this mode (using IterableDataset for memory efficiency)
+        train_dataset = BelkaIterableDataset(
             parquet_path=train_data.path,
-            subset="train",
-            val_split=0.0,
-            seed=seed,
             vocab_path=vocab_local_path,
             max_length=max_length,
             mode=mode  # Mode-specific dataset
         )
 
-        val_dataset = BelkaDataset(
+        val_dataset = BelkaIterableDataset(
             parquet_path=val_data.path,
-            subset="train",
-            val_split=0.0,
-            seed=seed,
             vocab_path=vocab_local_path,
             max_length=max_length,
             mode=mode  # Mode-specific dataset
         )
 
-        print(f"Train dataset size: {len(train_dataset)}")
-        print(f"Validation dataset size: {len(val_dataset)}")
+        print(f"Train dataset: streaming from {train_data.path}")
+        print(f"Validation dataset: streaming from {val_data.path}")
 
         # Create DataLoaders for this mode
-        g = torch.Generator()
-        g.manual_seed(seed)
-
+        # Note: IterableDataset doesn't support shuffle=True, but data is already shuffled in split step
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
-            shuffle=True,
             num_workers=num_workers,
             pin_memory=True,
             drop_last=True,
-            generator=g
         )
 
         val_loader = DataLoader(
             val_dataset,
             batch_size=batch_size,
-            shuffle=False,
             num_workers=num_workers,
             pin_memory=True,
             drop_last=False
