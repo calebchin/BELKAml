@@ -10,6 +10,8 @@ const auth = new GoogleAuth({
 const client = await auth.getClient();
 const token = await client.getAccessToken();
 
+console.log("TOKEN", token);
+
 const app = express();
 
 // middleware
