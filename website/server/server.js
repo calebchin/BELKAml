@@ -48,7 +48,7 @@ app.post("/api/binding-probability", async (req, res) => {
     res.json({
       molecule,
       protein,
-      bindingProbability: await predict(molecule),
+      bindingProbability: (await predict(molecule)).predictions[0][0],
     });
   } catch (err) {
     console.error(err);
