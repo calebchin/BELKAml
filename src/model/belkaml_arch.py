@@ -119,6 +119,9 @@ class Belka(nn.Module):
             x = encoder(x, key_padding_mask)
 
         if self.mode == "mlm":
+            # Remove protein token position (first position) for MLM prediction
+            # We only want to predict masked SMILES tokens, not the protein token
+            x = x[:, 1:, :]  # (batch, seq_len, depth) - remove first position
             x = self.mlm_head(x)
             x = f.softmax(x, dim=-1)
         else:
