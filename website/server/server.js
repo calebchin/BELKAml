@@ -18,17 +18,37 @@ app.post("/api/binding-probability", async (req, res) => {
       });
     }
 
-    // const r = await fetch(process.env.MODEL_ENDPOINT, {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify(req.body),
-    // });
-    // const prediction = await r.json();
+    async function predict(smiles) {
+      const project = "belkaml";
+      const location = "northamerica-northeast2";
+      const endpointId = "1730486166584557568";
+      const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/endpoints/${endpointId}:predict`;
+
+      const body = {
+        instances: [{ smiles: smiles }],
+      };
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.GOOGLE_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Error ${res.status} ${res.statusText}: ${text}`);
+      }
+
+      return await res.json();
+    }
 
     res.json({
       molecule,
       protein,
-      bindingProbability: Math.random(),
+      bindingProbability: await predict(molecule),
     });
   } catch (err) {
     console.error(err);
