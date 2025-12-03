@@ -29,6 +29,7 @@ steps:
   entrypoint: 'gsutil'
   args: ['cp', 'src/vertex_ai/train_pipeline.yaml', 'gs://belkaml_pipeline_artifacts/train_pipeline.yaml']
 
+
 # Step 5: Automatically trigger pipeline run after deployment
 # - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
 #   entrypoint: 'bash'
