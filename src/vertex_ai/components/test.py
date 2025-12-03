@@ -199,6 +199,17 @@ def test_model(
     tpr = np.nan_to_num(tpr, nan=0.0, posinf=1.0, neginf=0.0)
     thresholds = np.nan_to_num(thresholds, nan=0.0, posinf=1.0, neginf=0.0)
 
+    # Downsample ROC curve to avoid exceeding Vertex AI metadata size limit (128KB)
+    # Large test sets can produce thousands of threshold points
+    max_points = 1000
+    if len(fpr) > max_points:
+        # Evenly sample points to preserve curve shape
+        indices = np.linspace(0, len(fpr) - 1, max_points, dtype=int)
+        fpr = fpr[indices]
+        tpr = tpr[indices]
+        thresholds = thresholds[indices]
+        logging.info(f"Downsampled ROC curve from {len(fpr)} to {max_points} points to fit metadata limits")
+
     classification_metrics.log_roc_curve(
         fpr=fpr.tolist(), tpr=tpr.tolist(), threshold=thresholds.tolist()
     )
