@@ -10,6 +10,7 @@
     "dependencies": {
         "cors": "^2.8.5",
         "express": "^5.1.0",
+        "google-auth-library": "^10.5.0",
         "node-fetch": "^3.3.2"
     }
 }
