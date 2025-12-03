@@ -209,9 +209,19 @@ def finetune_model(
         print("-" * 20)
 
         # Create datasets for this mode (using IterableDataset for memory efficiency)
+        # Download protein vocab from GCS
+        protein_vocab_local_path = "/tmp/protein_vocab.txt"
+        protein_vocab_gcs = "gs://belkamlbucket/data/raw/protein_vocab.txt"
+        bucket_name = protein_vocab_gcs.split("/")[2]
+        blob_path = "/".join(protein_vocab_gcs.split("/")[3:])
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        blob.download_to_filename(protein_vocab_local_path)
+
         train_dataset = BelkaIterableDataset(
             parquet_path=train_data.path,
             vocab_path=vocab_local_path,
+            protein_vocab_path=protein_vocab_local_path,
             max_length=max_length,
             mode=mode  # Mode-specific dataset
         )
@@ -219,6 +229,7 @@ def finetune_model(
         val_dataset = BelkaIterableDataset(
             parquet_path=val_data.path,
             vocab_path=vocab_local_path,
+            protein_vocab_path=protein_vocab_local_path,
             max_length=max_length,
             mode=mode  # Mode-specific dataset
         )
@@ -277,7 +288,8 @@ def finetune_model(
                     break
 
                 # Extract inputs and targets from batch dictionary (mode-specific)
-                x = batch['smiles'].to(device)
+                x_smiles = batch['smiles'].to(device)
+                x_protein = batch['protein'].to(device)
 
                 if mode == "mlm":
                     # MLM: binds contains (seq_len, 2) targets
@@ -291,7 +303,7 @@ def finetune_model(
 
                 # Forward pass
                 optimizer.zero_grad()
-                y_pred = belka_model(x)
+                y_pred = belka_model(x_smiles, x_protein)
                 loss = loss_fn(y_pred, y)
 
                 # Backward pass
@@ -312,7 +324,8 @@ def finetune_model(
                         break
 
                     # Extract inputs and targets (mode-specific)
-                    x = batch['smiles'].to(device)
+                    x_smiles = batch['smiles'].to(device)
+                    x_protein = batch['protein'].to(device)
 
                     if mode == "mlm":
                         # MLM: binds contains (seq_len, 2) targets
@@ -325,7 +338,7 @@ def finetune_model(
                         y = batch['binds'].to(device)
 
                     # Forward pass
-                    y_pred = belka_model(x)
+                    y_pred = belka_model(x_smiles, x_protein)
                     loss = loss_fn(y_pred, y)
                     val_loss += loss.item()
 

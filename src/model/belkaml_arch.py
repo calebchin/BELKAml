@@ -16,6 +16,8 @@ class Belka(nn.Module):
         mode: str,
         num_layers: int,
         vocab_size: int,
+        num_proteins: int = 3,
+        protein_embed_dim: int = 16,
         **kwargs: dict
     ):
         super(Belka, self).__init__()
@@ -25,6 +27,8 @@ class Belka(nn.Module):
         self.num_layers = num_layers
         self.vocab_size = vocab_size
         self.mode = mode
+        self.num_proteins = num_proteins
+        self.protein_embed_dim = protein_embed_dim
 
         # Layers
         # Note: Assuming Embeddings and EncoderLayer are implemented elsewhere
@@ -32,6 +36,15 @@ class Belka(nn.Module):
         self.embeddings = Embeddings(
             max_length=128, depth=32, input_dim=vocab_size
         )  # TODO: don't hard-code, replace once **parameters are implemented
+
+        # Protein embeddings
+        self.protein_embeddings = nn.Embedding(
+            num_embeddings=num_proteins,
+            embedding_dim=protein_embed_dim
+        )
+
+        # Project protein embeddings to match SMILES embedding dimension
+        self.protein_projection = nn.Linear(protein_embed_dim, 32)
 
         self.encoder_layers = nn.ModuleList(
             [
@@ -73,9 +86,34 @@ class Belka(nn.Module):
             raise ValueError(f"Invalid mode: {mode}")
         self.mode = mode
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        """Forward pass of main Belka arch"""
-        x, key_padding_mask = self.embeddings(inputs)
+    def forward(self, smiles_inputs: torch.Tensor, protein_inputs: torch.Tensor) -> torch.Tensor:
+        """Forward pass of main Belka arch.
+
+        Args:
+            smiles_inputs: Tokenized SMILES tensor of shape (batch, seq_len)
+            protein_inputs: Protein ID tensor of shape (batch,)
+
+        Returns:
+            Model output (shape depends on mode: MLM/FPS/CLF)
+        """
+        # Get SMILES embeddings
+        smiles_emb, key_padding_mask = self.embeddings(smiles_inputs)
+        # smiles_emb shape: (batch, seq_len, depth=32)
+
+        # Get protein embeddings and project to match SMILES dimension
+        protein_emb = self.protein_embeddings(protein_inputs)  # (batch, protein_embed_dim)
+        protein_emb = self.protein_projection(protein_emb)     # (batch, 32)
+        protein_emb = protein_emb.unsqueeze(1)                 # (batch, 1, 32)
+
+        # Prepend protein embedding to SMILES sequence
+        x = torch.cat([protein_emb, smiles_emb], dim=1)  # (batch, seq_len+1, 32)
+
+        # Update key_padding_mask to account for protein token (never masked)
+        if key_padding_mask is not None:
+            # Add False for protein token position (not masked)
+            batch_size = key_padding_mask.shape[0]
+            protein_mask = torch.zeros(batch_size, 1, dtype=torch.bool, device=key_padding_mask.device)
+            key_padding_mask = torch.cat([protein_mask, key_padding_mask], dim=1)
 
         for encoder in self.encoder_layers:
             x = encoder(x, key_padding_mask)

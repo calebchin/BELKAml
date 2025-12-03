@@ -42,7 +42,8 @@ dependencies = [
     "google-cloud-bigquery",
     "pyyaml",
     "ray",
-    "google-cloud-pipeline-components"
+    "google-cloud-pipeline-components",
+    "fastapi"
 ]
 
 [project.optional-dependencies]

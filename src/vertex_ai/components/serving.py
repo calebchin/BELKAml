@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 # Import directly from your project modules
 from model.belkaml_arch import Belka
 from utils.torch_data_utils import SMILESTokenizer, BelkaRawDataset
+from utils.protein_encoder import ProteinEncoder
 from skfp.fingerprints import ECFPFingerprint
 
 # Setup logging
@@ -22,11 +23,13 @@ app = FastAPI()
 model = None
 tokenizer = None
 ecfp_transformer = None
+protein_encoder = None
 config = {}
 
 # Constants
 DEFAULT_CONFIG_GCS_PATH = "gs://belkamlbucket/configs/vertex_train_config.yaml"
 DEFAULT_VOCAB_GCS_PATH = "gs://belkamlbucket/data/raw/vocab.txt"
+DEFAULT_PROTEIN_VOCAB_GCS_PATH = "gs://belkamlbucket/data/raw/protein_vocab.txt"
 
 
 def download_blob(gcs_uri: str, local_path: str):
@@ -49,7 +52,7 @@ def download_blob(gcs_uri: str, local_path: str):
 @app.on_event("startup")
 def load_resources():
     """Runs once on startup to load config, vocab, preprocessors, and model."""
-    global model, tokenizer, ecfp_transformer, config
+    global model, tokenizer, ecfp_transformer, protein_encoder, config
     logger.info("Starting initialization...")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -81,10 +84,18 @@ def load_resources():
     logger.info(f"Downloading vocab from {vocab_gcs_path}...")
     download_blob(vocab_gcs_path, local_vocab_path)
 
-    logger.info("Initializing Tokenizer and ECFP Transformer...")
+    # Download protein vocab
+    protein_vocab_gcs_path = config.get("protein_vocab_path", DEFAULT_PROTEIN_VOCAB_GCS_PATH)
+    local_protein_vocab_path = "/tmp/protein_vocab.txt"
+
+    logger.info(f"Downloading protein vocab from {protein_vocab_gcs_path}...")
+    download_blob(protein_vocab_gcs_path, local_protein_vocab_path)
+
+    logger.info("Initializing Tokenizer, ECFP Transformer, and Protein Encoder...")
     try:
         tokenizer = SMILESTokenizer(local_vocab_path)
         ecfp_transformer = ECFPFingerprint(fp_size=2048)
+        protein_encoder = ProteinEncoder(local_protein_vocab_path)
     except Exception as e:
         logger.error(f"Failed to initialize preprocessors: {e}")
         raise e
@@ -96,6 +107,8 @@ def load_resources():
         "mode": "clf",
         "num_layers": config.get('num_layers', 2),
         "vocab_size": config.get('vocab_size', 44),
+        "num_proteins": config.get('num_proteins', 3),
+        "protein_embed_dim": config.get('protein_embed_dim', 16),
     }
     logger.info(f"Initializing model with params: {model_params}")
 
@@ -126,9 +139,9 @@ def health():
 @app.post("/predict")
 async def predict(request: Request):
     """
-    Accepts JSON: {"instances": [{"smiles": "C=CC..."}, ...]}
+    Accepts JSON: {"instances": [{"smiles": "C=CC...", "protein": "BRD4"}, ...]}
     """
-    global model, tokenizer, ecfp_transformer
+    global model, tokenizer, ecfp_transformer, protein_encoder
     if not model:
         return {"error": "Model not initialized"}, 503
 
@@ -139,20 +152,26 @@ async def predict(request: Request):
         if not instances:
             return {"error": "No instances provided"}, 400
 
-        # Extract SMILES strings
+        # Extract SMILES strings and protein names
         smiles_list = []
+        protein_list = []
         for inst in instances:
             if isinstance(inst, dict):
                 smiles_list.append(inst.get("smiles", ""))
+                protein_list.append(inst.get("protein", "BRD4"))  # Default to BRD4
             else:
+                # Fallback: treat as SMILES string, use default protein
                 smiles_list.append(str(inst))
+                protein_list.append("BRD4")
 
         # 1. Create Dataset & Loader (Using the class from utils)
         max_length = config.get("max_length", 128)
         dataset = BelkaRawDataset(
             smiles_list=smiles_list,
+            protein_list=protein_list,
             tokenizer=tokenizer,
             ecfp_transformer=ecfp_transformer,
+            protein_vocab_path="/tmp/protein_vocab.txt",
             max_length=max_length
         )
 
@@ -171,9 +190,10 @@ async def predict(request: Request):
         with torch.no_grad():
             for batch in loader:
                 # Move features to device
-                # BelkaRawDataset returns 'smiles' (token_ids) and 'ecfp'
-                x = batch['smiles'].to(device)
-                outputs = model(x)
+                # BelkaRawDataset returns 'smiles' (token_ids), 'protein' (protein_id), and 'ecfp'
+                x_smiles = batch['smiles'].to(device)
+                x_protein = batch['protein'].to(device)
+                outputs = model(x_smiles, x_protein)
 
                 probs = torch.sigmoid(outputs)
                 all_preds.extend(probs.cpu().numpy().tolist())

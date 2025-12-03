@@ -73,16 +73,28 @@ def preprocess_gcs(
         blob.download_to_filename(vocab_path)
     else:
         vocab_path = vocab_gcs_path
+
+    # Download protein vocab file from GCS
+    protein_vocab_path = "/tmp/protein_vocab.txt"
+    protein_vocab_gcs = "gs://belkamlbucket/data/raw/protein_vocab.txt"
+    bucket_name = protein_vocab_gcs.split("/")[2]
+    blob_path = "/".join(protein_vocab_gcs.split("/")[3:])
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_path)
+    blob.download_to_filename(protein_vocab_path)
     # class to be loaded once per CPU core
     
     class PreProcessor:
         def __init__(self):
             from utils.torch_data_utils import SMILESTokenizer, ECFPFingerprint
+            from utils.protein_encoder import ProteinEncoder
             # Initialize expensive objects once per worker
             self.tokenizer = SMILESTokenizer(vocab_path)
             self.ecfp_transformer = ECFPFingerprint(fp_size=2048)
+            self.protein_encoder = ProteinEncoder(protein_vocab_path)
             self.max_length = max_length
-            
+
             # Cache special tokens
             self.pad_token = self.tokenizer.token_to_id["[PAD]"]
             self.unk_token = self.tokenizer.token_to_id.get("[UNK]", 2)
@@ -92,11 +104,13 @@ def preprocess_gcs(
 
             # Access numpy arrays from the batch
             smiles_list = batch["molecule_smiles"]
+            protein_names = batch["protein_name"]
 
             token_ids_list = []
             ecfp_list = []
+            protein_id_list = []
 
-            for smile in smiles_list:
+            for smile, protein_name in zip(smiles_list, protein_names):
                 # --- Tokenization Logic ---
                 try:
                     tokens = atomInSmiles.smiles_tokenizer(smile)
@@ -119,13 +133,22 @@ def preprocess_gcs(
                 except Exception:
                     ecfp_list.append(np.zeros(2048, dtype=np.float32))
 
+                # --- Protein Encoding ---
+                try:
+                    protein_id = self.protein_encoder.encode(protein_name)
+                    protein_id_list.append(protein_id)
+                except Exception:
+                    # Default to BRD4 (ID=0) on error
+                    protein_id_list.append(0)
+
             # Return new columns plus original columns from batch
             return {
                 "molecule_smiles": batch["molecule_smiles"],
                 "protein_name": batch["protein_name"],
                 "binds": batch["binds"],
                 "token_ids": token_ids_list,
-                "ecfp": ecfp_list
+                "ecfp": ecfp_list,
+                "protein_id": protein_id_list
             }
     #raw_data_path = Path(raw_data.path)
     logging.info("Starting Ray data pipeline...")

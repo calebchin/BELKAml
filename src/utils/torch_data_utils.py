@@ -166,7 +166,7 @@ class BelkaDataset(Dataset):
     """
 
     def __init__(self, parquet_path: str, subset: str = "train", val_split: float = 0.1, seed: int = 42,
-                 vocab_path: str = None, max_length: int = 128, mode: str = "clf"):
+                 vocab_path: str = None, protein_vocab_path: str = None, max_length: int = 128, mode: str = "clf"):
         """Initialize BelkaDataset.
 
         Args:
@@ -175,13 +175,14 @@ class BelkaDataset(Dataset):
             val_split: Validation split fraction (default 0.1 = 10%)
             seed: Random seed for reproducibility
             vocab_path: Path to vocabulary file
+            protein_vocab_path: Path to protein vocabulary file
             max_length: Maximum sequence length for tokenization
             mode: Training mode - 'mlm', 'fps', or 'clf' (default: 'clf')
 
         """
         # Read full parquet file
         df = pd.read_parquet(parquet_path)
-        self.data = df 
+        self.data = df
 
         # # Create train/val split using numpy Generator
         # rng = np.random.default_rng(seed)
@@ -214,6 +215,10 @@ class BelkaDataset(Dataset):
         else:
             self.tokenizer = None
             self.vocab_size = None
+
+        # Initialize protein encoder
+        from utils.protein_encoder import ProteinEncoder
+        self.protein_encoder = ProteinEncoder(protein_vocab_path)
 
     def __len__(self):
         return len(self.data)
@@ -272,12 +277,21 @@ class BelkaDataset(Dataset):
         ecfp = torch.tensor(row["ecfp"], dtype=torch.float32)
         binds = int(row["binds"])
 
+        # Encode protein name to ID (if available in preprocessing, use it; otherwise encode on-the-fly)
+        if "protein_id" in row:
+            protein_id = int(row["protein_id"])
+        else:
+            # Fallback: encode protein name on-the-fly (for backward compatibility)
+            protein_name = row.get("protein_name", "BRD4")  # Default to BRD4 if missing
+            protein_id = self.protein_encoder.encode(protein_name)
+
         # Mode-specific processing
         if self.mode == "mlm":
             # Apply random masking for MLM training
             masked_ids, mlm_targets = self._apply_mlm_masking(token_ids)
             return {
                 "smiles": masked_ids,  # Masked token IDs
+                "protein": torch.tensor(protein_id, dtype=torch.long),
                 "binds": mlm_targets,  # Shape (seq_len, 2) for MLM loss
                 "ecfp": ecfp,
             }
@@ -285,6 +299,7 @@ class BelkaDataset(Dataset):
             # FPS or CLF mode - use pre-computed features as-is
             return {
                 "smiles": token_ids,  # Unmasked token IDs
+                "protein": torch.tensor(protein_id, dtype=torch.long),
                 "binds": torch.tensor([binds], dtype=torch.float32),
                 "ecfp": ecfp,
             }
@@ -302,13 +317,14 @@ class BelkaIterableDataset(IterableDataset):
     - binds (int): Binary binding label (0 or 1)
     """
 
-    def __init__(self, parquet_path: str, vocab_path: str = None,
+    def __init__(self, parquet_path: str, vocab_path: str = None, protein_vocab_path: str = None,
                  max_length: int = 128, mode: str = "clf"):
         """Initialize BelkaIterableDataset.
 
         Args:
             parquet_path: Path to parquet file (local or GCS)
             vocab_path: Path to vocabulary file (for MLM vocab_size)
+            protein_vocab_path: Path to protein vocabulary file
             max_length: Maximum sequence length
             mode: Training mode - 'mlm', 'fps', or 'clf' (default: 'clf')
         """
@@ -323,6 +339,10 @@ class BelkaIterableDataset(IterableDataset):
         else:
             self.tokenizer = None
             self.vocab_size = None
+
+        # Initialize protein encoder
+        from utils.protein_encoder import ProteinEncoder
+        self.protein_encoder = ProteinEncoder(protein_vocab_path)
 
     def _apply_mlm_masking(self, token_ids: torch.Tensor, mask_prob: float = 0.15) -> tuple:
         """Apply BERT-style random masking for MLM training.
@@ -377,12 +397,21 @@ class BelkaIterableDataset(IterableDataset):
         ecfp = torch.tensor(row["ecfp"], dtype=torch.float32)
         binds = int(row["binds"])
 
+        # Encode protein name to ID (if available in preprocessing, use it; otherwise encode on-the-fly)
+        if "protein_id" in row:
+            protein_id = int(row["protein_id"])
+        else:
+            # Fallback: encode protein name on-the-fly (for backward compatibility)
+            protein_name = row.get("protein_name", "BRD4")  # Default to BRD4 if missing
+            protein_id = self.protein_encoder.encode(protein_name)
+
         # Mode-specific processing
         if self.mode == "mlm":
             # Apply random masking for MLM training
             masked_ids, mlm_targets = self._apply_mlm_masking(token_ids)
             return {
                 "smiles": masked_ids,
+                "protein": torch.tensor(protein_id, dtype=torch.long),
                 "binds": mlm_targets,
                 "ecfp": ecfp,
             }
@@ -390,6 +419,7 @@ class BelkaIterableDataset(IterableDataset):
             # FPS or CLF mode - use pre-computed features as-is
             return {
                 "smiles": token_ids,
+                "protein": torch.tensor(protein_id, dtype=torch.long),
                 "binds": torch.tensor([binds], dtype=torch.float32),
                 "ecfp": ecfp,
             }
@@ -473,9 +503,11 @@ class BelkaRawDataset(Dataset):
     Unlike BelkaDataset (which reads pre-computed parquet), this takes a list of strings.
     """
 
-    def __init__(self, smiles_list: list, tokenizer: SMILESTokenizer, ecfp_transformer: ECFPFingerprint,
+    def __init__(self, smiles_list: list, protein_list: list, tokenizer: SMILESTokenizer,
+                 ecfp_transformer: ECFPFingerprint, protein_vocab_path: str = None,
                  max_length: int = 128):
         self.smiles_list = smiles_list
+        self.protein_list = protein_list
         self.tokenizer = tokenizer
         self.ecfp = ecfp_transformer
         self.max_length = max_length
@@ -483,11 +515,16 @@ class BelkaRawDataset(Dataset):
         self.pad_token = self.tokenizer.token_to_id.get("[PAD]", 0)
         self.unk_token = self.tokenizer.token_to_id.get("[UNK]", 2)
 
+        # Initialize protein encoder
+        from utils.protein_encoder import ProteinEncoder
+        self.protein_encoder = ProteinEncoder(protein_vocab_path)
+
     def __len__(self):
         return len(self.smiles_list)
 
     def __getitem__(self, idx):
         smile = self.smiles_list[idx]
+        protein_name = self.protein_list[idx]
 
         # 1. Tokenization Logic (Matches preprocess.py)
         try:
@@ -506,7 +543,11 @@ class BelkaRawDataset(Dataset):
         except Exception:
             fp = np.zeros(2048, dtype=np.float32)
 
+        # 3. Protein encoding
+        protein_id = self.protein_encoder.encode(protein_name)
+
         return {
             "smiles": torch.tensor(ids, dtype=torch.long),
+            "protein": torch.tensor(protein_id, dtype=torch.long),
             "ecfp": torch.tensor(fp, dtype=torch.float32)
         }

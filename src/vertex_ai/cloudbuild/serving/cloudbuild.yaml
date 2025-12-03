@@ -20,7 +20,7 @@ steps:
   args:
     - '-c'
     - |
-      pip install google-cloud-aiplatform kfp
+      pip install google-cloud-aiplatform kfp google_cloud_pipeline_components
       cd src/vertex_ai
       python jobs/deploy_pipeline_job.py
 

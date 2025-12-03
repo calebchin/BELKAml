@@ -117,7 +117,19 @@ def test_model(
     # Extract token IDs (model expects token IDs, not concatenated features)
     # token_ids is a list of integers from preprocessing
     token_ids_array = np.stack(df["token_ids"].values)
-    X_test = torch.tensor(token_ids_array, dtype=torch.long).to(device)
+    X_test_smiles = torch.tensor(token_ids_array, dtype=torch.long).to(device)
+
+    # Extract protein IDs (either pre-computed or encode on-the-fly)
+    from utils.protein_encoder import ProteinEncoder
+    protein_encoder = ProteinEncoder()  # Uses default 3-protein mapping
+
+    if "protein_id" in df.columns:
+        protein_ids_array = np.asarray(df["protein_id"].values, dtype=int)
+    else:
+        # Encode protein names on-the-fly
+        protein_ids_array = np.array([protein_encoder.encode(p) for p in df["protein_name"].values])
+
+    X_test_protein = torch.tensor(protein_ids_array, dtype=torch.long).to(device)
 
     y_test = np.asarray(df[target_column].values, dtype=float)
 
@@ -129,6 +141,8 @@ def test_model(
         mode='clf',  # Always use classification mode for testing
         num_layers=num_layers,
         vocab_size=vocab_size,
+        num_proteins=3,
+        protein_embed_dim=16,
     )
 
     # Load state_dict (model weights) from checkpoint
@@ -150,10 +164,11 @@ def test_model(
     # batch inference
     y_test_prob_list = []
     with torch.no_grad():
-        for i in range(0, len(X_test), batch_size):
-            batch = X_test[i : i + batch_size]
+        for i in range(0, len(X_test_smiles), batch_size):
+            batch_smiles = X_test_smiles[i : i + batch_size]
+            batch_protein = X_test_protein[i : i + batch_size]
             # Model already applies sigmoid in clf_head, no need to apply again
-            batch_prob = loaded_model(batch).cpu().numpy().ravel()
+            batch_prob = loaded_model(batch_smiles, batch_protein).cpu().numpy().ravel()
             y_test_prob_list.append(batch_prob)
     y_test_prob = np.concatenate(y_test_prob_list)
     y_test_pred = (y_test_prob > 0.5).astype(int)
