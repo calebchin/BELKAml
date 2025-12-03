@@ -8,9 +8,7 @@ const auth = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/cloud-platform"],
 });
 const client = await auth.getClient();
-const token = await client.getAccessToken();
-
-console.log("TOKEN", token);
+const { token } = await client.getAccessToken();
 
 const app = express();
 
