@@ -1,6 +1,14 @@
+import { GoogleAuth } from "google-auth-library";
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
+
+// GoogleAuth auto-pulls credentials inside Cloud Run / Cloud Functions
+const auth = new GoogleAuth({
+  scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+});
+const client = await auth.getClient();
+const token = await client.getAccessToken();
 
 const app = express();
 
@@ -31,7 +39,7 @@ app.post("/api/binding-probability", async (req, res) => {
       const res = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.GOOGLE_ACCESS_TOKEN}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
