@@ -395,34 +395,64 @@ class BelkaIterableDataset(IterableDataset):
             }
 
     def __iter__(self):
-        """Iterate over parquet file, streaming row groups."""
+        """Iterate over parquet file(s), streaming row groups.
+
+        Handles both single parquet files and directories with multiple sharded parquet files.
+        """
+        import glob
+        from pathlib import Path
+
         # Get worker info for distributed reading
         worker_info = torch.utils.data.get_worker_info()
 
-        # Open parquet file for streaming
-        pf = pq.ParquetFile(self.parquet_path)
-        num_row_groups = pf.num_row_groups
+        # Determine if path is a directory or single file
+        path = Path(self.parquet_path)
 
-        # Distribute row groups across workers
+        if path.is_dir():
+            # Directory with multiple parquet files (from split component)
+            parquet_files = sorted(glob.glob(str(path / "*.parquet")))
+        elif str(path).startswith("gs://"):
+            # GCS path - could be file or directory
+            # Try to read as dataset first (handles both cases)
+            try:
+                import pyarrow.dataset as ds
+                dataset = ds.dataset(self.parquet_path, format="parquet")
+                parquet_files = [fragment.path for fragment in dataset.get_fragments()]
+            except Exception:
+                # Fallback: treat as single file
+                parquet_files = [self.parquet_path]
+        else:
+            # Single parquet file
+            parquet_files = [str(path)]
+
+        # Distribute files and row groups across workers
         if worker_info is not None:
-            # Multi-worker: each worker processes subset of row groups
             worker_id = worker_info.id
             num_workers = worker_info.num_workers
-            row_groups = range(worker_id, num_row_groups, num_workers)
         else:
-            # Single worker: process all row groups
-            row_groups = range(num_row_groups)
+            worker_id = 0
+            num_workers = 1
 
-        # Stream row groups
-        for rg_idx in row_groups:
-            # Read one row group at a time (memory efficient)
-            table = pf.read_row_group(rg_idx)
-            df = table.to_pandas()
+        # Process files assigned to this worker
+        for file_idx, parquet_file in enumerate(parquet_files):
+            # Distribute files across workers (simple round-robin)
+            if file_idx % num_workers != worker_id:
+                continue
 
-            # Yield rows one by one
-            for idx in range(len(df)):
-                row = df.iloc[idx]
-                yield self._process_row(row)
+            # Open parquet file for streaming
+            pf = pq.ParquetFile(parquet_file)
+            num_row_groups = pf.num_row_groups
+
+            # Stream all row groups from this file
+            for rg_idx in range(num_row_groups):
+                # Read one row group at a time (memory efficient)
+                table = pf.read_row_group(rg_idx)
+                df = table.to_pandas()
+
+                # Yield rows one by one
+                for idx in range(len(df)):
+                    row = df.iloc[idx]
+                    yield self._process_row(row)
 
 
 def collate_fn(batch: List[Dict], tokenizer: SMILESTokenizer, max_length: int) -> Dict:

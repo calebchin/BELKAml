@@ -146,11 +146,12 @@ def preprocess_gcs(
     ds = ds.filter(lambda row: row["molecule_smiles"] is not None)
     
     # Apply transformations in parallel
-    # concurrency=None defaults to using all available CPUs
+    # Use compute parameter instead of deprecated concurrency for callable classes
+    # Match worker pool to available CPUs (16 CPUs allocated in pipeline)
     processed_ds = ds.map_batches(
-        PreProcessor, 
-        concurrency=None, 
-        batch_size=4096  # Adjust based on memory
+        PreProcessor,
+        batch_size=4096,  # Adjust based on memory
+        compute=ray.data.ActorPoolStrategy(size=12)  # 12 workers (leaving 4 for Ray overhead)
     )
 
     processed_ds.write_parquet(data.path)
