@@ -517,7 +517,9 @@ class BelkaRawDataset(Dataset):
 
         # Initialize protein encoder
         from utils.protein_encoder import ProteinEncoder
-        self.protein_encoder = ProteinEncoder(protein_vocab_path)
+        #self.protein_encoder = ProteinEncoder(protein_vocab_path)
+        # T
+        self.protein_encoder = ProteinEncoder(None)
 
     def __len__(self):
         return len(self.smiles_list)
