@@ -3,8 +3,8 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "belkaml"
-requires-python = ">=3.12"
+name = "adjacentmol"
+requires-python = ">=3.10"
 description = "End-to-end application for predicting binding affinity of small molecules to protein targets with deep learning."
 version = "1.0.0"
 authors = [
@@ -40,7 +40,10 @@ dependencies = [
     "dask",
     "kfp>=2.14.6",
     "google-cloud-bigquery",
-    "pyyaml"
+    "pyyaml",
+    "ray",
+    "google-cloud-pipeline-components",
+    "fastapi"
 ]
 
 [project.optional-dependencies]
@@ -51,10 +54,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/calebchin/BELKAml"
-Documentation = "https://github.com/calebchin/BELKAml"
-Repository = "https://github.com/calebchin/BELKAml"
-Issues = "https://github.com/calebchin/BELKAml/issues"
+Homepage = "https://github.com/calebchin/AdjacentMol"
+Documentation = "https://github.com/calebchin/AdjacentMol"
+Repository = "https://github.com/calebchin/AdjacentMol"
+Issues = "https://github.com/calebchin/AdjacentMol/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

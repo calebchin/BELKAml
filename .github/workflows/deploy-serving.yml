@@ -1,4 +1,4 @@
-name: Deploy Training Pipeline
+name: Deploy Serving Component
 
 on:
   push:
@@ -6,8 +6,12 @@ on:
       - main
       - test_deploy
     paths:
-      - "src/vertex_ai/**"
-      - ".github/workflows/pipeline.yml"
+      - "src/vertex_ai/components/serving.py"
+      - "src/vertex_ai/components/serving/Dockerfile"
+      - "src/vertex_ai/pipelines/deploy_pipeline.py"
+      - "src/vertex_ai/jobs/deploy_pipeline_job.py"
+      - "src/vertex_ai/cloudbuild/serving/cloudbuild.yaml"
+      - ".github/workflows/deploy-serving.yml"
 
 permissions:
   contents: 'read'
@@ -31,9 +35,9 @@ jobs:
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: Submit Training Pipeline build
+      - name: Submit Serving Build
         run: |
           gcloud builds submit . \
-            --config=./src/vertex_ai/cloudbuild/train/cloudbuild.yaml \
+            --config=./src/vertex_ai/cloudbuild/serving/cloudbuild.yaml \
             --substitutions="_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},_COMMIT_SHA=${{ github.sha }}" \
             --suppress-logs

@@ -1,4 +1,4 @@
-from kfp.v2.dsl import (
+from kfp.dsl import (
     component,
     Input,
     Output,
@@ -43,7 +43,7 @@ def test_model(
         by default 'gs://belkamlbucket/configs/vertex_train_config.yaml'.
     batch_size : int, optional
         Batch size for GPU inference, by default 1024.
-    y_column : str, optional
+    target_column : str, optional
         Name of the target column in the dataset, by default 'binds'.
 
     Returns
@@ -98,18 +98,39 @@ def test_model(
     print(f"Loaded config: hidden_size={hidden_size}, num_layers={num_layers}, vocab_size={vocab_size}, dropout_rate={dropout_rate}")
 
     test_data_path = Path(test_data.path)
-    if test_data_path.suffix == ".parquet":
+    if test_data_path.is_dir():
+        # Read all files in directory (from sharded output)
+        df = pd.read_parquet(test_data_path)
+    elif test_data_path.suffix == ".parquet":
         df = pd.read_parquet(test_data_path)
     elif test_data_path.suffix == ".csv":
         df = pd.read_csv(test_data_path)
     else:
         raise ValueError(f"Unsupported file format: {test_data_path.suffix}")
 
+    # Validate that we have test data
+    if len(df) == 0:
+        raise ValueError("Test dataset is empty. Ensure test_size > 0 in the split component.")
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    X_test = torch.tensor(df.drop(columns=[target_column]).values, dtype=torch.float32).to(
-        device
-    )
+    # Extract token IDs (model expects token IDs, not concatenated features)
+    # token_ids is a list of integers from preprocessing
+    token_ids_array = np.stack(df["token_ids"].values)
+    X_test_smiles = torch.tensor(token_ids_array, dtype=torch.long).to(device)
+
+    # Extract protein IDs (either pre-computed or encode on-the-fly)
+    from utils.protein_encoder import ProteinEncoder
+    protein_encoder = ProteinEncoder()  # Uses default 3-protein mapping
+
+    if "protein_id" in df.columns:
+        protein_ids_array = np.asarray(df["protein_id"].values, dtype=int)
+    else:
+        # Encode protein names on-the-fly
+        protein_ids_array = np.array([protein_encoder.encode(p) for p in df["protein_name"].values])
+
+    X_test_protein = torch.tensor(protein_ids_array, dtype=torch.long).to(device)
+
     y_test = np.asarray(df[target_column].values, dtype=float)
 
     # Instantiate model architecture using config from training
@@ -120,10 +141,20 @@ def test_model(
         mode='clf',  # Always use classification mode for testing
         num_layers=num_layers,
         vocab_size=vocab_size,
+        num_proteins=3,
+        protein_embed_dim=16,
     )
 
     # Load state_dict (model weights) from checkpoint
-    state_dict = torch.load(model.path, map_location=device)
+    # model.path is a directory, the actual model file is model.pt inside it
+    model_path = Path(model.path)
+    if model_path.is_dir():
+        model_file = model_path / "model.pt"
+    else:
+        model_file = model_path
+
+    print(f"Loading model from {model_file}")
+    state_dict = torch.load(model_file, map_location=device)
     loaded_model.load_state_dict(state_dict)
 
     # Move to device and set eval mode
@@ -133,9 +164,11 @@ def test_model(
     # batch inference
     y_test_prob_list = []
     with torch.no_grad():
-        for i in range(0, len(X_test), batch_size):
-            batch = X_test[i : i + batch_size]
-            batch_prob = torch.sigmoid(loaded_model(batch)).cpu().numpy().ravel()
+        for i in range(0, len(X_test_smiles), batch_size):
+            batch_smiles = X_test_smiles[i : i + batch_size]
+            batch_protein = X_test_protein[i : i + batch_size]
+            # Model already applies sigmoid in clf_head, no need to apply again
+            batch_prob = loaded_model(batch_smiles, batch_protein).cpu().numpy().ravel()
             y_test_prob_list.append(batch_prob)
     y_test_prob = np.concatenate(y_test_prob_list)
     y_test_pred = (y_test_prob > 0.5).astype(int)
@@ -144,27 +177,61 @@ def test_model(
     # ---------------
 
     # log AUROC, AUPRC (AP), F1 score, precision, recall, MCC
+    # Handle edge cases where metrics may be undefined (NaN) for single-class data
+    import logging
+
+    def safe_metric(metric_fn, *args, **kwargs):
+        """Compute metric and replace NaN/Inf with None for JSON serialization."""
+        try:
+            value = metric_fn(*args, **kwargs)
+            # Explicitly check using np.isnan before conversion to catch numpy NaN
+            if np.isnan(value) or np.isinf(value):
+                logging.warning(f"{metric_fn.__name__} returned NaN/Inf, replacing with None")
+                return None
+            return float(value)
+        except (ValueError, ZeroDivisionError, Exception) as e:
+            logging.warning(f"{metric_fn.__name__} raised {type(e).__name__}: {e}, returning None")
+            return None
+
     test_metrics_dict = {
-        "__TEST_AUROC": float(roc_auc_score(y_test, y_test_prob)),
-        "__TEST_AUPRC": float(average_precision_score(y_test, y_test_prob)),
-        "__TEST_F1": float(f1_score(y_test, y_test_pred)),
-        "__TEST_precision": precision_score(y_test, y_test_pred),
-        "__TEST_recall": float(recall_score(y_test, y_test_pred)),
-        "__TEST_MCC": float(matthews_corrcoef(y_test, y_test_pred)),
+        "__TEST_AUROC": safe_metric(roc_auc_score, y_test, y_test_prob),
+        "__TEST_AUPRC": safe_metric(average_precision_score, y_test, y_test_prob),
+        "__TEST_F1": safe_metric(f1_score, y_test, y_test_pred, zero_division=0),
+        "__TEST_precision": safe_metric(precision_score, y_test, y_test_pred, zero_division=0),
+        "__TEST_recall": safe_metric(recall_score, y_test, y_test_pred, zero_division=0),
+        "__TEST_MCC": safe_metric(matthews_corrcoef, y_test, y_test_pred),
         "__TEST_sample_size": len(y_test),
-        "__TEST_positive_ratio": float(y_test.mean()),
         "__TEST_positive_ratio": float(y_test.mean()),
         "__TEST_negative_ratio": float(1 - y_test.mean()),
     }
 
     # log ROC
+    # Handle case where ROC curve may contain inf/nan values
     fpr, tpr, thresholds = roc_curve(y_test, y_test_prob)
+
+    # Replace inf/nan in all ROC curve arrays with finite values
+    fpr = np.nan_to_num(fpr, nan=0.0, posinf=1.0, neginf=0.0)
+    tpr = np.nan_to_num(tpr, nan=0.0, posinf=1.0, neginf=0.0)
+    thresholds = np.nan_to_num(thresholds, nan=0.0, posinf=1.0, neginf=0.0)
+
+    # Downsample ROC curve to avoid exceeding Vertex AI metadata size limit (128KB)
+    # Large test sets can produce thousands of threshold points
+    max_points = 1000
+    if len(fpr) > max_points:
+        # Evenly sample points to preserve curve shape
+        indices = np.linspace(0, len(fpr) - 1, max_points, dtype=int)
+        fpr = fpr[indices]
+        tpr = tpr[indices]
+        thresholds = thresholds[indices]
+        logging.info(f"Downsampled ROC curve from {len(fpr)} to {max_points} points to fit metadata limits")
+
     classification_metrics.log_roc_curve(
         fpr=fpr.tolist(), tpr=tpr.tolist(), threshold=thresholds.tolist()
     )
 
     # log confusion matrix
-    tn, fp, fn, tp = confusion_matrix(y_test, y_test_pred).ravel()
+    # Specify labels to ensure 2x2 matrix even if one class is missing
+    tn, fp, fn, tp = confusion_matrix(y_test, y_test_pred, labels=[0, 1]).ravel()
     classification_metrics.log_confusion_matrix(
         categories=["non-binder", "binder"],
         matrix=[[int(tn), int(fp)], [int(fn), int(tp)]],
@@ -173,31 +240,33 @@ def test_model(
     # 2. Log PER protein metrics.
     # ---------------------------
 
-    grouped = df.groupby("protein_smiles")
+    grouped = df.groupby("protein_name")
     for protein, group in grouped:
-        y_test_p = y_test[group.index]
-        y_test_prob_p = y_test_prob[group.index]
-        y_test_pred_p = y_test_pred[group.index]
+        # Use boolean indexing to avoid index mismatch with numpy arrays
+        mask = df.index.isin(group.index)
+        y_test_p = y_test[mask]
+        y_test_prob_p = y_test_prob[mask]
+        y_test_pred_p = y_test_pred[mask]
 
         test_metrics_dict = {
             **test_metrics_dict,
-            f"__TEST_AUROC_{protein}": float(roc_auc_score(y_test_p, y_test_prob_p)),
-            f"__TEST_AUPRC_{protein}": float(
-                average_precision_score(y_test_p, y_test_prob_p)
-            ),
-            f"__TEST_F1_{protein}": float(f1_score(y_test_p, y_test_pred_p)),
-            f"__TEST_precision_{protein}": float(
-                precision_score(y_test_p, y_test_pred_p)
-            ),
-            f"__TEST_recall_{protein}": float(recall_score(y_test_p, y_test_pred_p)),
-            f"__TEST_MCC_{protein}": float(matthews_corrcoef(y_test_p, y_test_pred_p)),
+            f"__TEST_AUROC_{protein}": safe_metric(roc_auc_score, y_test_p, y_test_prob_p),
+            f"__TEST_AUPRC_{protein}": safe_metric(average_precision_score, y_test_p, y_test_prob_p),
+            f"__TEST_F1_{protein}": safe_metric(f1_score, y_test_p, y_test_pred_p, zero_division=0),
+            f"__TEST_precision_{protein}": safe_metric(precision_score, y_test_p, y_test_pred_p, zero_division=0),
+            f"__TEST_recall_{protein}": safe_metric(recall_score, y_test_p, y_test_pred_p, zero_division=0),
+            f"__TEST_MCC_{protein}": safe_metric(matthews_corrcoef, y_test_p, y_test_pred_p),
             f"__TEST_sample_size_{protein}": len(y_test_p),
             f"__TEST_positive_ratio_{protein}": float(y_test_p.mean()),
             f"__TEST_negative_ratio_{protein}": float(1 - y_test_p.mean()),
         }
 
+    # Log metrics, skipping None values
     for key, val in test_metrics_dict.items():
-        test_metrics.log_metric(key, val)
+        if val is not None:
+            test_metrics.log_metric(key, val)
 
+    # Save to file, removing None values for JSON compatibility
+    metrics_for_json = {k: v for k, v in test_metrics_dict.items() if v is not None}
     with open(test_metrics.path, "w") as f:
-        json.dump(test_metrics_dict, f)
+        json.dump(metrics_for_json, f)

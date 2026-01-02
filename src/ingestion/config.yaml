@@ -8,7 +8,6 @@ bigquery:
   table: "all_data"
 
 data_preprocessing:
-  experimental_batch_num: 1
   timezone: "UTC"
   # col_name_map:
   #   molecule_id: "molecule_smiles"

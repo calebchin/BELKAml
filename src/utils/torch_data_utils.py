@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 
 # import torch.nn as nn
-from torch.utils.data import Dataset  # , DataLoader
+from torch.utils.data import Dataset, IterableDataset
 from sklearn.model_selection import train_test_split
 import os
 from typing import List, Dict
@@ -21,6 +21,7 @@ from rdkit import Chem
 import atomInSmiles
 import dask.dataframe as dd
 import pyarrow as pa
+import pyarrow.parquet as pq
 import itertools
 
 
@@ -165,7 +166,7 @@ class BelkaDataset(Dataset):
     """
 
     def __init__(self, parquet_path: str, subset: str = "train", val_split: float = 0.1, seed: int = 42,
-                 vocab_path: str = None, max_length: int = 128):
+                 vocab_path: str = None, protein_vocab_path: str = None, max_length: int = 128, mode: str = "clf"):
         """Initialize BelkaDataset.
 
         Args:
@@ -174,77 +175,314 @@ class BelkaDataset(Dataset):
             val_split: Validation split fraction (default 0.1 = 10%)
             seed: Random seed for reproducibility
             vocab_path: Path to vocabulary file
+            protein_vocab_path: Path to protein vocabulary file
             max_length: Maximum sequence length for tokenization
+            mode: Training mode - 'mlm', 'fps', or 'clf' (default: 'clf')
 
         """
         # Read full parquet file
         df = pd.read_parquet(parquet_path)
+        self.data = df
 
-        # Create train/val split using numpy Generator
-        rng = np.random.default_rng(seed)
-        total_rows = len(df)
-        val_size = int(total_rows * val_split)
+        # # Create train/val split using numpy Generator
+        # rng = np.random.default_rng(seed)
+        # total_rows = len(df)
+        # val_size = int(total_rows * val_split)
 
-        # Shuffle indices
-        indices = rng.permutation(total_rows)
+        # # Shuffle indices
+        # indices = rng.permutation(total_rows)
 
-        # Split indices
-        val_indices = indices[:val_size]
-        train_indices = indices[val_size:]
+        # # Split indices
+        # val_indices = indices[:val_size]
+        # train_indices = indices[val_size:]
 
-        # Select subset
-        if subset == "train":
-            self.data = df.iloc[train_indices].reset_index(drop=True)
-        elif subset == "val":
-            self.data = df.iloc[val_indices].reset_index(drop=True)
-        else:
-            raise ValueError(f"subset must be 'train' or 'val', got {subset}")
+        # # Select subset
+        # if subset == "train":
+        #     self.data = df.iloc[train_indices].reset_index(drop=True)
+        # elif subset == "val":
+        #     self.data = df.iloc[val_indices].reset_index(drop=True)
+        # else:
+        #     raise ValueError(f"subset must be 'train' or 'val', got {subset}")
 
-        # Initialize tokenizer if vocab provided
+        # Store training mode
+        self.mode = mode
         self.max_length = max_length
+
+        # Initialize tokenizer if vocab provided (for vocab_size in MLM masking)
         if vocab_path:
             self.tokenizer = SMILESTokenizer(vocab_path)
+            self.vocab_size = len(self.tokenizer.token_to_id)
         else:
             self.tokenizer = None
+            self.vocab_size = None
 
-        # Initialize ECFP transformer
-        self.ecfp_transformer = ECFPFingerprint(fp_size=2048)  # type: ignore
+        # Initialize protein encoder
+        from utils.protein_encoder import ProteinEncoder
+        self.protein_encoder = ProteinEncoder(protein_vocab_path)
 
     def __len__(self):
         return len(self.data)
 
+    def _apply_mlm_masking(self, token_ids: torch.Tensor, mask_prob: float = 0.15) -> tuple:
+        """Apply BERT-style random masking for MLM training.
+
+        Args:
+            token_ids: Token IDs tensor of shape (seq_len,)
+            mask_prob: Probability of masking each token (default: 0.15)
+
+        Returns:
+            masked_ids: Token IDs with masking applied
+            targets: Shape (seq_len, 2) where [:, 0] = positions to predict, [:, 1] = original tokens
+        """
+        seq_len = token_ids.shape[0]
+
+        # Create mask: 1 where we will mask, 0 otherwise
+        # Don't mask [PAD] tokens (id=0) or special tokens
+        mask = (torch.rand(seq_len) < mask_prob) & (token_ids > 2)  # Skip [PAD], [MASK], [UNK]
+
+        # Create targets (seq_len, 2)
+        targets = torch.zeros((seq_len, 2), dtype=torch.long)
+        targets[:, 0] = -1  # Initialize all as "not masked"
+        targets[:, 1] = token_ids  # Original tokens for frequency weighting
+
+        # For masked positions: set target to original token
+        targets[mask, 0] = token_ids[mask]
+
+        # Create masked input
+        masked_ids = token_ids.clone()
+
+        if mask.sum() > 0:
+            # 80% → [MASK], 10% → random, 10% → keep original
+            mask_type = torch.rand(mask.sum().item())
+            mask_positions = torch.where(mask)[0]
+
+            # 80% [MASK] (token ID = 1)
+            mask_mask = mask_positions[mask_type < 0.8]
+            masked_ids[mask_mask] = 1
+
+            # 10% random token (avoid special tokens 0, 1, 2)
+            random_mask = mask_positions[(mask_type >= 0.8) & (mask_type < 0.9)]
+            if len(random_mask) > 0 and self.vocab_size:
+                masked_ids[random_mask] = torch.randint(3, self.vocab_size, (len(random_mask),))
+
+            # 10% keep original (already set)
+
+        return masked_ids, targets
+
     def __getitem__(self, idx: int) -> Dict:
         row = self.data.iloc[idx]
 
-        smiles = row["molecule_smiles"]
+        # Load pre-computed features from preprocessing
+        token_ids = torch.tensor(row["token_ids"], dtype=torch.long)
+        ecfp = torch.tensor(row["ecfp"], dtype=torch.float32)
         binds = int(row["binds"])
 
-        # Tokenize SMILES if tokenizer is available
-        if self.tokenizer:
-            tokens = atomInSmiles.smiles_tokenizer(smiles)
-            # Convert tokens to IDs
-            token_ids = [self.tokenizer.token_to_id.get(token, self.tokenizer.token_to_id.get("[UNK]", 2))
-                        for token in tokens]
-            # Truncate or pad
-            token_ids = token_ids[:self.max_length]
-            token_ids = token_ids + [self.tokenizer.token_to_id["[PAD]"]] * (self.max_length - len(token_ids))
-            smiles_tokens = torch.tensor(token_ids, dtype=torch.long)
+        # Encode protein name to ID (if available in preprocessing, use it; otherwise encode on-the-fly)
+        if "protein_id" in row:
+            protein_id = int(row["protein_id"])
         else:
-            smiles_tokens = torch.zeros(self.max_length, dtype=torch.long)
+            # Fallback: encode protein name on-the-fly (for backward compatibility)
+            protein_name = row.get("protein_name", "BRD4")  # Default to BRD4 if missing
+            protein_id = self.protein_encoder.encode(protein_name)
 
-        # Generate ECFP fingerprint from SMILES
-        try:
-            ecfp = self.ecfp_transformer.transform([smiles])[0]
-        except Exception as e:
-            # If SMILES parsing fails, return zero vector
-            print(f"Warning: Failed to generate ECFP for SMILES: {smiles}, error: {e}")
-            ecfp = np.zeros(2048, dtype=np.float32)
+        # Mode-specific processing
+        if self.mode == "mlm":
+            # Apply random masking for MLM training
+            masked_ids, mlm_targets = self._apply_mlm_masking(token_ids)
+            return {
+                "smiles": masked_ids,  # Masked token IDs
+                "protein": torch.tensor(protein_id, dtype=torch.long),
+                "binds": mlm_targets,  # Shape (seq_len, 2) for MLM loss
+                "ecfp": ecfp,
+            }
+        else:
+            # FPS or CLF mode - use pre-computed features as-is
+            return {
+                "smiles": token_ids,  # Unmasked token IDs
+                "protein": torch.tensor(protein_id, dtype=torch.long),
+                "binds": torch.tensor([binds], dtype=torch.float32),
+                "ecfp": ecfp,
+            }
 
-        return {
-            "smiles": smiles_tokens,  # Tokenized SMILES
-            "binds": torch.tensor([binds], dtype=torch.float32),  # Single binary label
-            "ecfp": torch.tensor(ecfp, dtype=torch.float32),
-        }
+
+class BelkaIterableDataset(IterableDataset):
+    """Memory-efficient PyTorch IterableDataset for BELKA parquet data.
+
+    Streams data from parquet files using PyArrow, avoiding loading entire dataset into memory.
+    Each DataLoader worker reads different row groups for parallel processing.
+
+    Expects parquet with columns:
+    - token_ids (list of ints): Pre-computed tokenized SMILES
+    - ecfp (list of floats): Pre-computed ECFP fingerprint (2048-dim)
+    - binds (int): Binary binding label (0 or 1)
+    """
+
+    def __init__(self, parquet_path: str, vocab_path: str = None, protein_vocab_path: str = None,
+                 max_length: int = 128, mode: str = "clf"):
+        """Initialize BelkaIterableDataset.
+
+        Args:
+            parquet_path: Path to parquet file (local or GCS)
+            vocab_path: Path to vocabulary file (for MLM vocab_size)
+            protein_vocab_path: Path to protein vocabulary file
+            max_length: Maximum sequence length
+            mode: Training mode - 'mlm', 'fps', or 'clf' (default: 'clf')
+        """
+        self.parquet_path = parquet_path
+        self.mode = mode
+        self.max_length = max_length
+
+        # Initialize tokenizer only for vocab_size (needed for MLM random token selection)
+        if vocab_path:
+            self.tokenizer = SMILESTokenizer(vocab_path)
+            self.vocab_size = len(self.tokenizer.token_to_id)
+        else:
+            self.tokenizer = None
+            self.vocab_size = None
+
+        # Initialize protein encoder
+        from utils.protein_encoder import ProteinEncoder
+        self.protein_encoder = ProteinEncoder(protein_vocab_path)
+
+    def _apply_mlm_masking(self, token_ids: torch.Tensor, mask_prob: float = 0.15) -> tuple:
+        """Apply BERT-style random masking for MLM training.
+
+        Args:
+            token_ids: Token IDs tensor of shape (seq_len,)
+            mask_prob: Probability of masking each token (default: 0.15)
+
+        Returns:
+            masked_ids: Token IDs with masking applied
+            targets: Shape (seq_len, 2) where [:, 0] = positions to predict, [:, 1] = original tokens
+        """
+        seq_len = token_ids.shape[0]
+
+        # Create mask: 1 where we will mask, 0 otherwise
+        # Don't mask [PAD] tokens (id=0) or special tokens
+        mask = (torch.rand(seq_len) < mask_prob) & (token_ids > 2)  # Skip [PAD], [MASK], [UNK]
+
+        # Create targets (seq_len, 2)
+        targets = torch.zeros((seq_len, 2), dtype=torch.long)
+        targets[:, 0] = -1  # Initialize all as "not masked"
+        targets[:, 1] = token_ids  # Original tokens for frequency weighting
+
+        # For masked positions: set target to original token
+        targets[mask, 0] = token_ids[mask]
+
+        # Create masked input
+        masked_ids = token_ids.clone()
+
+        if mask.sum() > 0:
+            # 80% → [MASK], 10% → random, 10% → keep original
+            mask_type = torch.rand((int(mask.sum().item()),))
+            mask_positions = torch.where(mask)[0]
+
+            # 80% [MASK] (token ID = 1)
+            mask_mask = mask_positions[mask_type < 0.8]
+            masked_ids[mask_mask] = 1
+
+            # 10% random token (avoid special tokens 0, 1, 2)
+            random_mask = mask_positions[(mask_type >= 0.8) & (mask_type < 0.9)]
+            if len(random_mask) > 0 and self.vocab_size:
+                masked_ids[random_mask] = torch.randint(3, self.vocab_size, (len(random_mask),))
+
+            # 10% keep original (already set)
+
+        return masked_ids, targets
+
+    def _process_row(self, row) -> Dict:
+        """Process a single row from the parquet file."""
+        # Load pre-computed features
+        token_ids = torch.tensor(row["token_ids"], dtype=torch.long)
+        ecfp = torch.tensor(row["ecfp"], dtype=torch.float32)
+        binds = int(row["binds"])
+
+        # Encode protein name to ID (if available in preprocessing, use it; otherwise encode on-the-fly)
+        if "protein_id" in row:
+            protein_id = int(row["protein_id"])
+        else:
+            # Fallback: encode protein name on-the-fly (for backward compatibility)
+            protein_name = row.get("protein_name", "BRD4")  # Default to BRD4 if missing
+            protein_id = self.protein_encoder.encode(protein_name)
+
+        # Mode-specific processing
+        if self.mode == "mlm":
+            # Apply random masking for MLM training
+            masked_ids, mlm_targets = self._apply_mlm_masking(token_ids)
+            return {
+                "smiles": masked_ids,
+                "protein": torch.tensor(protein_id, dtype=torch.long),
+                "binds": mlm_targets,
+                "ecfp": ecfp,
+            }
+        else:
+            # FPS or CLF mode - use pre-computed features as-is
+            return {
+                "smiles": token_ids,
+                "protein": torch.tensor(protein_id, dtype=torch.long),
+                "binds": torch.tensor([binds], dtype=torch.float32),
+                "ecfp": ecfp,
+            }
+
+    def __iter__(self):
+        """Iterate over parquet file(s), streaming row groups.
+
+        Handles both single parquet files and directories with multiple sharded parquet files.
+        """
+        import glob
+        from pathlib import Path
+
+        # Get worker info for distributed reading
+        worker_info = torch.utils.data.get_worker_info()
+
+        # Determine if path is a directory or single file
+        path = Path(self.parquet_path)
+
+        if path.is_dir():
+            # Directory with multiple parquet files (from split component)
+            parquet_files = sorted(glob.glob(str(path / "*.parquet")))
+        elif str(path).startswith("gs://"):
+            # GCS path - could be file or directory
+            # Try to read as dataset first (handles both cases)
+            try:
+                import pyarrow.dataset as ds
+                dataset = ds.dataset(self.parquet_path, format="parquet")
+                parquet_files = [fragment.path for fragment in dataset.get_fragments()]
+            except Exception:
+                # Fallback: treat as single file
+                parquet_files = [self.parquet_path]
+        else:
+            # Single parquet file
+            parquet_files = [str(path)]
+
+        # Distribute files and row groups across workers
+        if worker_info is not None:
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+        else:
+            worker_id = 0
+            num_workers = 1
+
+        # Process files assigned to this worker
+        for file_idx, parquet_file in enumerate(parquet_files):
+            # Distribute files across workers (simple round-robin)
+            if file_idx % num_workers != worker_id:
+                continue
+
+            # Open parquet file for streaming
+            pf = pq.ParquetFile(parquet_file)
+            num_row_groups = pf.num_row_groups
+
+            # Stream all row groups from this file
+            for rg_idx in range(num_row_groups):
+                # Read one row group at a time (memory efficient)
+                table = pf.read_row_group(rg_idx)
+                df = table.to_pandas()
+
+                # Yield rows one by one
+                for idx in range(len(df)):
+                    row = df.iloc[idx]
+                    yield self._process_row(row)
 
 
 def collate_fn(batch: List[Dict], tokenizer: SMILESTokenizer, max_length: int) -> Dict:
@@ -257,3 +495,61 @@ def collate_fn(batch: List[Dict], tokenizer: SMILESTokenizer, max_length: int) -
     encoded_smiles = tokenizer.encode(smiles, max_length=max_length)
 
     return {"smiles": encoded_smiles, "binds": binds, "ecfp": ecfp}
+
+
+class BelkaRawDataset(Dataset):
+    """
+    Dataset class for inference that computes features on-the-fly from raw SMILES.
+    Unlike BelkaDataset (which reads pre-computed parquet), this takes a list of strings.
+    """
+
+    def __init__(self, smiles_list: list, protein_list: list, tokenizer: SMILESTokenizer,
+                 ecfp_transformer: ECFPFingerprint, protein_vocab_path: str = None,
+                 max_length: int = 128):
+        self.smiles_list = smiles_list
+        self.protein_list = protein_list
+        self.tokenizer = tokenizer
+        self.ecfp = ecfp_transformer
+        self.max_length = max_length
+        # Cache special tokens
+        self.pad_token = self.tokenizer.token_to_id.get("[PAD]", 0)
+        self.unk_token = self.tokenizer.token_to_id.get("[UNK]", 2)
+
+        # Initialize protein encoder
+        from utils.protein_encoder import ProteinEncoder
+        #self.protein_encoder = ProteinEncoder(protein_vocab_path)
+        # T
+        self.protein_encoder = ProteinEncoder(None)
+
+    def __len__(self):
+        return len(self.smiles_list)
+
+    def __getitem__(self, idx):
+        smile = self.smiles_list[idx]
+        protein_name = self.protein_list[idx]
+
+        # 1. Tokenization Logic (Matches preprocess.py)
+        try:
+            tokens = atomInSmiles.smiles_tokenizer(smile)
+            ids = [self.tokenizer.token_to_id.get(t, self.unk_token) for t in tokens]
+            # Truncate/Pad
+            ids = ids[:self.max_length]
+            ids = ids + [self.pad_token] * (self.max_length - len(ids))
+        except Exception:
+            ids = [self.pad_token] * self.max_length
+
+        # 2. ECFP Logic (Matches preprocess.py)
+        try:
+            # transform expects a list
+            fp = self.ecfp.transform([smile])[0]
+        except Exception:
+            fp = np.zeros(2048, dtype=np.float32)
+
+        # 3. Protein encoding
+        protein_id = self.protein_encoder.encode(protein_name)
+
+        return {
+            "smiles": torch.tensor(ids, dtype=torch.long),
+            "protein": torch.tensor(protein_id, dtype=torch.long),
+            "ecfp": torch.tensor(fp, dtype=torch.float32)
+        }

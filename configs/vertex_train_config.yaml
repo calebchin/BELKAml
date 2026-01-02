@@ -20,6 +20,7 @@ aip_project_location: "northamerica-northeast2"
 stratify_column: "protein_name"
 y_column: "binds"
 vocab_path: "gs://belkamlbucket/data/raw/vocab.txt"
+protein_vocab_path: "gs://belkamlbucket/data/raw/protein_vocab.txt"
 
 # Training Mode
 # Options: 'mlm' (masked language modeling), 'fps' (fingerprint), 'clf' (classification)
@@ -37,11 +38,13 @@ model_name: "belka_clf"
 hidden_size: 32
 num_layers: 2
 vocab_size: 44  # 41 tokens from vocab.txt + 3 special tokens ([PAD], [MASK], [UNK])
+num_proteins: 3  # BRD4, HSA, sEH
+protein_embed_dim: 16  # Dimension of protein embeddings
 dropout_rate: 0.1
 
 # Data Parameters
 batch_size: 32
-max_length: 128
+max_length: 150
 seed: 42
 num_workers: 2
 val_split: 0.1  # Used by split component (10% validation split)

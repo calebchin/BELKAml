@@ -1,0 +1,40 @@
+steps:
+# Step 1: Build the serving container image
+# Note: We point to the Dockerfile located in src/serving/Dockerfile
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build',
+    '-t', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belka-serving:${_COMMIT_SHA}',
+    '-t', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belka-serving:latest',
+    '-f', 'src/vertex_ai/components/serving/Dockerfile',
+    '.'
+  ]
+
+# Step 2: Push the image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '--all-tags', 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belka-serving']
+
+- name: 'python:3.12'
+  entrypoint: 'bash'
+  env: ['PYTHONPATH=/workspace/src']
+  args:
+    - '-c'
+    - |
+      pip install google-cloud-aiplatform kfp google_cloud_pipeline_components
+      cd src/vertex_ai
+      python jobs/deploy_pipeline_job.py
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: 'gsutil'
+  args: ['cp', 'src/vertex_ai/deploy_pipeline.yaml', 'gs://belkaml_pipeline_artifacts/deploy_pipeline.yaml']
+
+
+images:
+- 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belka-serving:${_COMMIT_SHA}'
+- 'northamerica-northeast2-docker.pkg.dev/${_PROJECT_ID}/belka-repo/belka-serving:latest'
+
+substitutions:
+  _PROJECT_ID: 'required' # Or 'required' if you want to force it
+  _COMMIT_SHA: 'latest'
+
+logsBucket: 'gs://belka-cloudbuild-logs'

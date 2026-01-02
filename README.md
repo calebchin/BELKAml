@@ -1,4 +1,4 @@
-# BELKAml
+# AdjacentMol
 
 End-to-end application for predicting binding affinity of small molecules to protein targets with deep learning.
 
@@ -33,7 +33,7 @@ pip install -e '.[dev]' # Install in editable mode
 
 Once installed, you can use the package with:
 ```python
-import belkaml as bml
+import adjacentmol as am
 ```
 
 > [!NOTE]
