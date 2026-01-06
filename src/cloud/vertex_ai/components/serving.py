@@ -8,7 +8,7 @@ from google.cloud import storage
 from torch.utils.data import DataLoader
 
 # Import directly from your project modules
-from model.belkaml_arch import Belka
+from src.model.pretrain.belkaml_arch import Belka
 from utils.torch_data_utils import SMILESTokenizer, BelkaRawDataset
 from utils.protein_encoder import ProteinEncoder
 from skfp.fingerprints import ECFPFingerprint
