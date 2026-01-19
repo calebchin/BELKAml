@@ -20,7 +20,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -38,7 +38,7 @@ dependencies = [
     "pyarrow",
     "torchmetrics",
     "dask",
-    "kfp>=2.14.6",
+    "kfp",
     "google-cloud-bigquery",
     "pyyaml",
     "ray",
@@ -51,6 +51,10 @@ dev = [
     "pre-commit",
     "ruff",
     "pytest",
+]
+foundationmodels = [
+    "biomed-multi-view @ git+https://github.com/calebchin/biomed-multi-view-fork.git",
+    # Add other foundation model dependencies here as you add them
 ]
 
 [project.urls]
@@ -153,4 +157,4 @@ lint.unfixable = []
 venv = ".venv"
 venvPath = "."
 include = ["src"]
-pythonVersion = "3.12"
+pythonVersion = "3.10"

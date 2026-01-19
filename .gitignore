@@ -211,3 +211,4 @@ __marimo__/
 *.pt
 *.parquet
 /testing_data
+.venv*/

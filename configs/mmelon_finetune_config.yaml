@@ -1,0 +1,45 @@
+# Configuration for MMELON Foundation Model Finetuning
+# This config trains a protein-aware classification head on top of frozen MMELON embeddings
+
+# Data Configuration
+data_path: "data/belka.parquet"  # Path to training data
+smiles_column: "smiles"           # Column name for SMILES strings
+protein_id_column: "protein_id"   # Column name for protein IDs (0, 1, 2, ...)
+label_column: "binds"             # Column name for binding labels (0 or 1)
+val_ratio: 0.1                    # Validation split ratio
+seed: 42                          # Random seed for reproducibility
+
+# Foundation Model Configuration
+foundation_model_path: "ibm/biomed.sm.mv-te-84m"  # HuggingFace model path
+freeze_foundation: true           # Freeze foundation model weights (only train head)
+
+# Classification Head Configuration
+num_proteins: 3                   # Number of unique protein targets
+protein_embedding_dim: 16         # Dimension of learned protein embeddings
+hidden_dims: [128, 64]            # Hidden layer sizes for MLP head
+dropout_rate: 0.1                 # Dropout probability
+activation: "relu"                # Activation function (relu, gelu, tanh, silu)
+use_normalization: false          # Whether to use normalization layers
+normalization_type: "layer"       # Type of normalization (layer or batch)
+
+# Loss Function Configuration
+focal_gamma: 2.0                  # Focal loss gamma parameter
+focal_alpha: 0.25                 # Focal loss alpha parameter (weight for positive class)
+
+# Training Configuration
+epochs: 50                        # Maximum number of epochs
+batch_size: 32                    # Batch size
+learning_rate: 0.001              # Initial learning rate
+epsilon: 1e-7                     # Optimizer epsilon
+num_workers: 4                    # DataLoader workers
+device: "auto"                    # Device (auto, cpu, cuda, mps)
+
+# Learning Rate Scheduler Configuration
+lr_factor: 0.5                    # Learning rate reduction factor
+lr_patience: 5                    # Patience for learning rate scheduler
+
+# Early Stopping Configuration
+patience: 10                      # Early stopping patience (epochs)
+
+# Checkpoint Configuration
+checkpoint_dir: "checkpoints/mmelon_finetune"  # Directory to save checkpoints
